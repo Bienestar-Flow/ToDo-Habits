@@ -76,16 +76,20 @@
     const freqDays = h.frequency && Array.isArray(h.frequency.days)
       ? h.frequency.days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6)
       : [];
-    return {
+    const out = {
       id: typeof h.id === 'string' && h.id ? h.id : ('h' + Date.now() + Math.random().toString(16).slice(2)),
       name: h.name,
       icon: typeof h.icon === 'string' ? h.icon : null,
       category: typeof h.category === 'string' ? h.category : '',
       frequency: { type: freqType, days: freqDays },
       startDate: typeof h.startDate === 'string' && DATE_RE.test(h.startDate) ? h.startDate : todayStr(),
+      status: (h.status === 'archived') ? 'archived' : 'active',
       completions: Array.isArray(h.completions) ? [...new Set(h.completions.filter(d => typeof d === 'string' && DATE_RE.test(d)))] : [],
       createdAt: typeof h.createdAt === 'number' ? h.createdAt : Date.now(),
     };
+    if (typeof h.endDate === 'string' && DATE_RE.test(h.endDate)) out.endDate = h.endDate;
+    if (typeof h.plannedEndDate === 'string' && DATE_RE.test(h.plannedEndDate)) out.plannedEndDate = h.plannedEndDate;
+    return out;
   }
 
   /** Reassigns any id already present in `seen` so two items never collide (e.g. re-importing the same backup). */
@@ -658,7 +662,8 @@
 
   function getHabitsTodayStats() {
     const today = todayStr();
-    const scheduled = habits.filter(h => isHabitScheduled(h, today));
+    const activeHabits = habits.filter(h => h.status !== 'archived');
+    const scheduled = activeHabits.filter(h => isHabitScheduled(h, today));
     const done = scheduled.filter(h => isHabitDone(h, today));
     return { scheduled, done: done.length, total: scheduled.length };
   }
@@ -693,10 +698,11 @@
 
   function renderStreakCard() {
     const card = $('#homeStreakCard');
-    if (habits.length === 0) { card.classList.add('hidden'); return; }
+    const activeHabits = habits.filter(h => h.status !== 'archived');
+    if (activeHabits.length === 0) { card.classList.add('hidden'); return; }
     card.classList.remove('hidden');
-    let best = habits[0], bestStreak = calcCurrentStreak(habits[0]);
-    habits.forEach(h => {
+    let best = activeHabits[0], bestStreak = calcCurrentStreak(activeHabits[0]);
+    activeHabits.forEach(h => {
       const s = calcCurrentStreak(h);
       if (s > bestStreak) { best = h; bestStreak = s; }
     });
@@ -936,25 +942,77 @@
   function renderHabits() {
     const list = $('#list-habits');
     list.innerHTML = '';
-    if (habits.length === 0) {
+    const activeHabits = habits.filter(h => h.status !== 'archived');
+    const archivedHabits = habits.filter(h => h.status === 'archived');
+
+    if (activeHabits.length === 0) {
       list.appendChild(emptyState(iconBolt, 'Habitはまだありません', '「Add habit」から続けたい習慣を登録しましょう。'));
     } else {
-      habits.forEach(h => list.appendChild(createHabitCard(h)));
+      activeHabits.forEach(h => list.appendChild(createHabitCard(h)));
     }
 
     const stats = getHabitsTodayStats();
     $('#habitProgressText').textContent = `${stats.done} / ${stats.total} habits completed`;
     $('#habitProgressFill').style.width = stats.total ? `${Math.round(stats.done / stats.total * 100)}%` : '0%';
+
+    renderHabitHistory();
+  }
+
+  function renderHabitHistory() {
+    const historyList = $('#list-habits-history');
+    historyList.innerHTML = '';
+    const archivedHabits = habits.filter(h => h.status === 'archived').sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''));
+
+    if (archivedHabits.length === 0) {
+      historyList.appendChild(emptyState(iconBolt, '終了した習慣はありません', '習慣を終了すると、ここに履歴として表示されます。'));
+      return;
+    }
+
+    archivedHabits.forEach(h => {
+      const stats = calcCompletionStats(h);
+      const card = document.createElement('div');
+      card.className = 'habit-card';
+      card.dataset.id = h.id;
+      card.style.cursor = 'pointer';
+      card.style.opacity = '0.75';
+
+      const icon = document.createElement('div');
+      icon.className = 'habit-icon';
+      icon.innerHTML = habitIconSvg(h);
+
+      const main = document.createElement('div');
+      main.className = 'habit-main';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'habit-name';
+      nameEl.textContent = h.name;
+      const meta = document.createElement('div');
+      meta.className = 'habit-meta';
+      const startLabel = new Date(h.startDate + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+      const endLabel = h.endDate ? new Date(h.endDate + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' }) : '−';
+      meta.innerHTML = `
+        <span class="meta-chip">${startLabel} → ${endLabel}</span>
+        <span class="meta-chip">${stats.done} / ${stats.scheduled} days</span>
+        <span class="meta-chip">${stats.rate}%</span>
+      `;
+      main.appendChild(nameEl);
+      main.appendChild(meta);
+      main.addEventListener('click', () => openHabitDetail(h.id));
+
+      card.appendChild(icon);
+      card.appendChild(main);
+      historyList.appendChild(card);
+    });
   }
 
   function renderTodayHabits() {
     const list = $('#list-today-habits');
     const block = $('#todayHabitsBlock');
     list.innerHTML = '';
-    if (habits.length === 0) { block.classList.add('hidden'); return; }
+    const activeHabits = habits.filter(h => h.status !== 'archived');
+    if (activeHabits.length === 0) { block.classList.add('hidden'); return; }
     block.classList.remove('hidden');
     const today = todayStr();
-    const scheduledToday = habits.filter(h => isHabitScheduled(h, today));
+    const scheduledToday = activeHabits.filter(h => isHabitScheduled(h, today));
     if (scheduledToday.length === 0) {
       list.appendChild(emptyState(iconBolt, '今日予定の習慣はありません', '', true));
       return;
@@ -1005,11 +1063,16 @@
     $('#detailTitle').textContent = h.name;
     const c = catInfo(h.category);
     const startLabel = new Date(h.startDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
-    $('#detailMeta').innerHTML = `
+    let metaHtml = `
       ${c ? `<span class="cat-chip" style="--dot:${c.color}"><span class="cat-dot"></span>${c.label}</span>` : ''}
       <span class="meta-chip">${frequencyLabel(h.frequency)}</span>
       <span class="meta-chip">開始: ${startLabel}</span>
     `;
+    if (h.status === 'archived' && h.endDate) {
+      const endLabel = new Date(h.endDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+      metaHtml += `<span class="meta-chip" style="opacity: 0.6;">終了: ${endLabel}</span>`;
+    }
+    $('#detailMeta').innerHTML = metaHtml;
 
     const streak = calcCurrentStreak(h);
     const longest = calcLongestStreak(h);
@@ -1086,8 +1149,27 @@
     const h = habits.find(h => h.id === currentHabitDetailId);
     if (h) renderCalendar(h);
   });
+  function archiveHabit(id) {
+    const h = habits.find(h => h.id === id);
+    if (!h) return;
+    h.status = 'archived';
+    h.endDate = todayStr();
+    const ok = saveState();
+    switchView('habits');
+    renderAll();
+    if (ok) showToast('習慣を終了しました。過去の記録はHistoryに保存されています。');
+  }
+
   $('#habitDetailBack').addEventListener('click', () => switchView('habits'));
   $('#detailEditBtn').addEventListener('click', () => openEditHabitModal(currentHabitDetailId));
+  $('#detailArchiveBtn').addEventListener('click', () => {
+    const h = habits.find(h => h.id === currentHabitDetailId);
+    if (!h) return;
+    const msg = `「${h.name}」を終了しますか？\n\n終了すると、今日以降のHabit一覧には表示されなくなります。\nこれまでの達成記録は履歴として保存されます。`;
+    if (confirm(msg)) {
+      archiveHabit(currentHabitDetailId);
+    }
+  });
   $('#detailDeleteBtn').addEventListener('click', () => {
     if (confirm('この習慣を削除しますか？達成履歴もすべて削除されます。')) {
       habits = habits.filter(h => h.id !== currentHabitDetailId);
@@ -1195,6 +1277,20 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
   }
+
+  /* ---------- Habit view toggle (Active/History) ---------- */
+
+  $$('#habitViewToggle button').forEach(b => b.addEventListener('click', () => {
+    const view = b.dataset.habitView;
+    $$('#habitViewToggle button').forEach(btn => btn.classList.toggle('active', btn.dataset.habitView === view));
+    if (view === 'active') {
+      $('#list-habits').style.display = '';
+      $('#list-habits-history').style.display = 'none';
+    } else {
+      $('#list-habits').style.display = 'none';
+      $('#list-habits-history').style.display = '';
+    }
+  }));
 
   /* ---------- View switching ---------- */
 
@@ -1400,6 +1496,7 @@
         id: 'h' + Date.now() + Math.random().toString(16).slice(2),
         name, icon: currentHabitIcon, category: habitCategorySelect.value,
         frequency, startDate: habitStartInput.value || todayStr(),
+        status: 'active',
         completions: [], createdAt: Date.now(),
       });
       showToast('習慣を追加しました');
