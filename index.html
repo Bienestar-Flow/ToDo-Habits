@@ -444,6 +444,25 @@
         </label>
       </div>
 
+      <span class="field-label">Period（任意）</span>
+      <div class="field-row" style="padding-bottom:16px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="radio" name="habitPeriodMode" value="none" id="habitPeriodNone" checked>
+          <span>期間を設定しない</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="radio" name="habitPeriodMode" value="set" id="habitPeriodSet">
+          <span>期間を設定する</span>
+        </label>
+      </div>
+      <div class="field-row" id="habitEndDateContainer" style="padding-bottom:16px; display:none;">
+        <label class="field-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>
+          End
+          <input type="date" id="habitEndInput">
+        </label>
+      </div>
+
       <span class="field-label">Frequency</span>
       <div class="field-row">
         <div class="segmented-field" id="habitFrequencyPicker">

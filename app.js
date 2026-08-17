@@ -877,6 +877,19 @@
 
   function habitIconSvg(habit) { return HABIT_ICONS[habit.icon] || iconBolt; }
 
+  function autoCompleteExpiredHabits() {
+    const today = todayStr();
+    let changed = false;
+    habits.forEach(h => {
+      if (h.status === 'active' && h.plannedEndDate && h.plannedEndDate < today && !h.endDate) {
+        h.status = 'archived';
+        h.endDate = h.plannedEndDate;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   function toggleHabitToday(id) {
     const h = habits.find(h => h.id === id);
     const today = todayStr();
@@ -940,6 +953,7 @@
   }
 
   function renderHabits() {
+    if (autoCompleteExpiredHabits()) saveState();
     const list = $('#list-habits');
     list.innerHTML = '';
     const activeHabits = habits.filter(h => h.status !== 'archived');
@@ -1068,6 +1082,10 @@
       <span class="meta-chip">${frequencyLabel(h.frequency)}</span>
       <span class="meta-chip">開始: ${startLabel}</span>
     `;
+    if (h.status === 'active' && h.plannedEndDate) {
+      const plannedLabel = new Date(h.plannedEndDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+      metaHtml += `<span class="meta-chip">予定終了日: ${plannedLabel}</span>`;
+    }
     if (h.status === 'archived' && h.endDate) {
       const endLabel = new Date(h.endDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
       metaHtml += `<span class="meta-chip" style="opacity: 0.6;">終了: ${endLabel}</span>`;
@@ -1398,9 +1416,14 @@
   const habitStartInput = $('#habitStartInput');
   const habitSaveBtn = $('#saveHabitBtn');
   const habitDeleteBtn = $('#deleteHabitBtn');
+  const habitPeriodNone = $('#habitPeriodNone');
+  const habitPeriodSet = $('#habitPeriodSet');
+  const habitEndDateContainer = $('#habitEndDateContainer');
+  const habitEndInput = $('#habitEndInput');
   let currentHabitIcon = null;
   let currentHabitFreqType = 'daily';
   let currentHabitDays = [];
+  let currentHabitPeriodMode = 'none';
 
   function renderIconPicker() {
     const wrap = $('#habitIconPicker');
@@ -1455,6 +1478,11 @@
     currentHabitDays = [];
     renderWeekdayPicker();
     setHabitFrequency('daily');
+    currentHabitPeriodMode = 'none';
+    habitPeriodNone.checked = true;
+    habitPeriodSet.checked = false;
+    habitEndDateContainer.style.display = 'none';
+    habitEndInput.value = '';
     habitSaveBtn.textContent = '追加';
     habitDeleteBtn.classList.add('hidden');
     validateHabitForm();
@@ -1473,11 +1501,33 @@
     currentHabitDays = (h.frequency.days || []).slice();
     renderWeekdayPicker();
     setHabitFrequency(h.frequency.type);
+    currentHabitPeriodMode = h.plannedEndDate ? 'set' : 'none';
+    habitPeriodNone.checked = (currentHabitPeriodMode === 'none');
+    habitPeriodSet.checked = (currentHabitPeriodMode === 'set');
+    if (currentHabitPeriodMode === 'set') {
+      habitEndDateContainer.style.display = '';
+      habitEndInput.value = h.plannedEndDate || '';
+    } else {
+      habitEndDateContainer.style.display = 'none';
+      habitEndInput.value = '';
+    }
     habitSaveBtn.textContent = '保存';
     habitDeleteBtn.classList.remove('hidden');
     validateHabitForm();
     openModal(habitOverlay, habitNameInput);
   }
+
+  $$('input[name="habitPeriodMode"]').forEach(radio => radio.addEventListener('change', (e) => {
+    currentHabitPeriodMode = e.target.value;
+    if (currentHabitPeriodMode === 'set') {
+      habitEndDateContainer.style.display = '';
+      habitEndInput.value = addDays(habitStartInput.value || todayStr(), 30);
+    } else {
+      habitEndDateContainer.style.display = 'none';
+      habitEndInput.value = '';
+    }
+  }));
+
   $('#addHabitBtn').addEventListener('click', openAddHabitModal);
   $('#cancelHabitModalBtn').addEventListener('click', () => closeModal(habitOverlay));
   habitOverlay.addEventListener('click', (e) => { if (e.target === habitOverlay) closeModal(habitOverlay); });
@@ -1486,19 +1536,24 @@
     const name = habitNameInput.value.trim();
     if (!name) return;
     const frequency = { type: currentHabitFreqType, days: currentHabitFreqType === 'custom' ? currentHabitDays.slice() : [] };
+    const plannedEndDate = (currentHabitPeriodMode === 'set' && habitEndInput.value) ? habitEndInput.value : undefined;
     if (editingHabitId) {
       const h = habits.find(h => h.id === editingHabitId);
       h.name = name; h.icon = currentHabitIcon; h.category = habitCategorySelect.value;
       h.startDate = habitStartInput.value || todayStr(); h.frequency = frequency;
+      if (currentHabitPeriodMode === 'set' && plannedEndDate) h.plannedEndDate = plannedEndDate;
+      else delete h.plannedEndDate;
       showToast('習慣を更新しました');
     } else {
-      habits.push({
+      const newHabit = {
         id: 'h' + Date.now() + Math.random().toString(16).slice(2),
         name, icon: currentHabitIcon, category: habitCategorySelect.value,
         frequency, startDate: habitStartInput.value || todayStr(),
         status: 'active',
         completions: [], createdAt: Date.now(),
-      });
+      };
+      if (plannedEndDate) newHabit.plannedEndDate = plannedEndDate;
+      habits.push(newHabit);
       showToast('習慣を追加しました');
     }
     saveState();
