@@ -1169,8 +1169,9 @@ button { cursor: pointer; }
   /* Trim the date pill a little so the wordmark keeps a readable size. */
   .today-pill { font-size: 11.5px; padding: 5px 9px; gap: 4px; }
 
-  .view { padding: 22px 16px 100px; }
+  .view { padding: 22px 16px 110px; }
   .view-title { font-size: 24px; }
+  .view-subtitle { font-size: 13px; }
   .hero-progress-pct { font-size: 30px; }
 
   .hero-top { flex-direction: column; gap: 16px; }
@@ -1206,9 +1207,11 @@ button { cursor: pointer; }
   .home-footer-row .home-card-streak { flex-basis: auto; }
   .home-card { padding: 16px 16px 4px; }
 
-  .quick-add-main { padding: 5px 6px 5px 11px; gap: 7px; }
-  .quick-add input#quickAddInput { font-size: 15px; }
-  .quick-add-submit { padding: 9px 14px; }
+  .quick-add-main { padding: 8px 6px 8px 11px; gap: 7px; min-height: 44px; }
+  .quick-add input#quickAddInput { font-size: 16px; }
+  .quick-add-submit { padding: 10px 16px; min-height: 44px; }
+  .quick-add-toggle { min-height: 44px; min-width: 44px; }
+  .icon-btn { min-width: 44px; min-height: 44px; }
   .habit-check.compact { min-height: 42px; }
 
   .mobile-tabbar {
@@ -1238,7 +1241,12 @@ button { cursor: pointer; }
 
   .add-task-btn { display: none; }
   .modal-overlay { padding: 0; align-items: flex-end; }
-  .modal { max-width: none; border-radius: 24px 24px 0 0; margin-bottom: 0; max-height: 92vh; overflow-y: auto; }
+  .modal { max-width: none; border-radius: 24px 24px 0 0; margin-bottom: 0; max-height: 90vh; overflow-y: auto; width: 100%; }
+  .modal-title-input { font-size: 16px; min-height: 44px; }
+  .modal-note { font-size: 14px; }
+  .field-pill input, .field-pill select { font-size: 15px; min-height: 40px; }
+  .field-row { gap: 10px; }
+  .modal-footer { flex-wrap: wrap; gap: 10px; padding: 16px 16px 16px + env(safe-area-inset-bottom); }
 
   .habit-card { flex-wrap: wrap; }
   .habit-check { min-height: 44px; padding: 9px 17px 9px 12px; }
@@ -1270,6 +1278,12 @@ button { cursor: pointer; }
     min-width: 90px;
     max-width: 140px;
   }
+  .topbar { padding: 10px 12px; }
+  .topbar-right { gap: 8px; }
+  .icon-btn { width: 32px; height: 32px; }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .view { padding: 14px 12px 110px; }
+  .view-title { font-size: 20px; }
 }
 
 /* Narrow + OS dark (no explicit theme chosen) */
