@@ -111,6 +111,18 @@
     return out;
   }
 
+  const CHARACTERS = [
+    { key: 'dog', label: 'いぬ' },
+    { key: 'cat', label: 'ねこ' },
+    { key: 'hamster', label: 'ハムスター' },
+    { key: 'rabbit', label: 'うさぎ' },
+    { key: 'penguin', label: 'ペンギン' },
+    { key: 'shiba', label: 'しばいぬ' },
+    { key: 'bear', label: 'くま' },
+    { key: 'otter', label: 'かわうそ' },
+  ];
+  const DEFAULT_CHARACTER = 'dog';
+
   /* ---------- Persistence ---------- */
 
   function migrateFromV1() {
@@ -446,18 +458,6 @@
       </g>
       ${HEART(115, 52, 0.7)}</svg>`,
   };
-
-  const CHARACTERS = [
-    { key: 'dog', label: 'いぬ' },
-    { key: 'cat', label: 'ねこ' },
-    { key: 'hamster', label: 'ハムスター' },
-    { key: 'rabbit', label: 'うさぎ' },
-    { key: 'penguin', label: 'ペンギン' },
-    { key: 'shiba', label: 'しばいぬ' },
-    { key: 'bear', label: 'くま' },
-    { key: 'otter', label: 'かわうそ' },
-  ];
-  const DEFAULT_CHARACTER = 'dog';
 
   /** Stable hash so a given date always maps to the same animal. */
   function hashString(str) {
