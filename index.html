@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Bienestar Flow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <header class="topbar">
+    <button class="brand" id="brandBtn" title="ホームへ">
+      <span class="brand-logo"></span>
+      <span class="sr-only">Bienestar Flow — ホームへ</span>
+    </button>
+    <div class="topbar-right">
+      <span class="today-pill" id="todayPill"></span>
+      <button class="icon-btn" id="settingsBtn" aria-label="設定" title="設定">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <aside class="sidebar">
+      <nav class="nav-list" id="navList">
+        <button class="nav-item active" data-view="today" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"></path><path d="M5 9.5V20a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V9.5"></path></svg>
+          Home <span class="count" data-count="today"></span>
+        </button>
+        <button class="nav-item" data-view="inbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+          Inbox <span class="count" data-count="inbox"></span>
+        </button>
+        <button class="nav-item" data-view="upcoming">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4M8.5 14l2 2 4-4"></path></svg>
+          Upcoming <span class="count" data-count="upcoming"></span>
+        </button>
+        <button class="nav-item" data-view="completed">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.3 12.3l2.4 2.4 5-5"></path></svg>
+          Completed <span class="count" data-count="completed"></span>
+        </button>
+        <div class="nav-divider"></div>
+        <button class="nav-item" data-view="habits">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"></path></svg>
+          Habits <span class="count" data-count="habits"></span>
+        </button>
+      </nav>
+
+      <div class="sidebar-section">
+        <div class="sidebar-eyebrow">
+          Categories
+        </div>
+        <div id="categoryList"></div>
+      </div>
+
+    </aside>
+
+    <main class="main">
+      <section class="view wide active" id="view-today">
+        <div class="view-header hero-header">
+          <button class="add-task-btn" data-add><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add task</button>
+        </div>
+
+        <div class="today-hero">
+         <div class="hero-top">
+          <div class="hero-character">
+            <div class="speech-bubble">
+              <h1 class="bubble-greeting" id="heroGreeting"></h1>
+              <p class="bubble-message" id="bubbleMessage"></p>
+            </div>
+            <div class="character-art" id="characterArt" aria-hidden="true"></div>
+          </div>
+
+          <div class="hero-content">
+          <div class="hero-date" id="heroDate"></div>
+          <form class="quick-add" id="quickAddForm" autocomplete="off">
+            <div class="quick-add-main">
+              <span class="quick-add-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+              <input type="text" id="quickAddInput" placeholder="What do you need to do?" maxlength="120" aria-label="タスク名">
+              <button type="button" class="quick-add-toggle" id="quickAddToggle" aria-expanded="false" title="詳細を設定">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h10M18 8h2M4 16h4M12 16h8"></path><circle cx="16" cy="8" r="2"></circle><circle cx="10" cy="16" r="2"></circle></svg>
+              </button>
+              <button type="submit" class="quick-add-submit" id="quickAddSubmit" disabled>追加</button>
+            </div>
+            <div class="quick-add-details hidden" id="quickAddDetails">
+              <label class="field-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>
+                <input type="date" id="quickAddDate">
+              </label>
+              <label class="field-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.3 2"></path></svg>
+                <input type="time" id="quickAddTime">
+              </label>
+              <label class="field-pill select-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+                <select id="quickAddCategory"></select>
+              </label>
+              <div class="priority-picker" id="quickPriorityPicker">
+                <button type="button" data-qpriority="low"><span class="priority-dot low"></span>低</button>
+                <button type="button" data-qpriority="medium" class="active"><span class="priority-dot medium"></span>中</button>
+                <button type="button" data-qpriority="high"><span class="priority-dot high"></span>高</button>
+              </div>
+            </div>
+          </form>
+
+          <div class="hero-progress-label">Today's Progress</div>
+          <div class="hero-progress-row">
+            <div class="hero-progress-pct" id="heroProgressPct">0%</div>
+            <div class="hero-progress-track"><div class="hero-progress-fill" id="heroProgressFill" style="width:0%"></div></div>
+          </div>
+          <div class="hero-breakdown">
+            <div class="breakdown-item">
+              <span class="breakdown-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>Tasks</span>
+              <span class="breakdown-value" id="heroTasksBreakdown">0 / 0</span>
+            </div>
+            <div class="breakdown-item">
+              <span class="breakdown-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c4 0 6.5-2.5 6.5-6 0-3-2-4.8-3-7.5-.5 1.5-1.3 2.3-2 2.3-1 0-1-1.5-1-3-2.5 2-4 5-4 8.2 0 3.5 2.5 6 3.5 6Z"></path></svg>Habits</span>
+              <span class="breakdown-value" id="heroHabitsBreakdown">0 / 0</span>
+            </div>
+          </div>
+          <div class="hero-message" id="heroMessage"></div>
+          </div>
+         </div>
+        </div>
+
+        <div class="home-grid">
+          <div class="home-card home-card-tasks">
+            <div class="home-card-header">
+              <h2 class="section-heading">Today's Tasks</h2>
+            </div>
+            <div class="task-list" id="list-today"></div>
+          </div>
+
+          <div class="home-card home-card-habits" id="todayHabitsBlock">
+            <div class="home-card-header">
+              <h2 class="section-heading">Today's Habits</h2>
+              <button class="card-link" data-view-link="habits">View habits</button>
+            </div>
+            <div class="home-card-subline" id="homeHabitProgressText"></div>
+            <div class="task-list" id="list-today-habits"></div>
+          </div>
+
+          <div class="home-footer-row">
+            <div class="home-card home-card-streak" id="homeStreakCard">
+              <div class="home-card-header">
+                <h2 class="section-heading small">Current streak</h2>
+              </div>
+              <div class="streak-card-value" id="streakCardValue"></div>
+              <div class="streak-card-label" id="streakCardLabel"></div>
+            </div>
+
+            <div class="home-card home-card-upcoming">
+              <div class="home-card-header">
+                <h2 class="section-heading small">Upcoming</h2>
+                <button class="card-link" data-view-link="upcoming">View all</button>
+              </div>
+              <div id="homeUpcomingList"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-inbox">
+        <div class="view-header">
+          <div class="view-title-row">
+            <h1 class="view-title">Inbox</h1>
+            <button class="add-task-btn" data-add><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add task</button>
+          </div>
+          <div class="view-subtitle">日付未定のタスク</div>
+        </div>
+        <div class="task-list" id="list-inbox"></div>
+      </section>
+
+      <section class="view" id="view-upcoming">
+        <div class="view-header">
+          <div class="view-title-row">
+            <h1 class="view-title">Upcoming</h1>
+            <button class="add-task-btn" data-add><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add task</button>
+          </div>
+          <div class="view-subtitle">明日以降の予定</div>
+        </div>
+        <div id="list-upcoming"></div>
+      </section>
+
+      <section class="view" id="view-completed">
+        <div class="view-header">
+          <div class="view-title-row">
+            <h1 class="view-title">Completed</h1>
+          </div>
+          <div class="view-subtitle" id="completedSubtitle"></div>
+        </div>
+        <div id="list-completed"></div>
+      </section>
+
+      <section class="view" id="view-habits">
+        <div class="view-header">
+          <div class="view-title-row">
+            <h1 class="view-title">Habits</h1>
+            <button class="add-task-btn" id="addHabitBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add habit</button>
+          </div>
+          <div class="view-subtitle">
+            Today ・ <span id="habitProgressText"></span>
+          </div>
+          <div class="habit-progress">
+            <div class="habit-progress-track"><div class="habit-progress-fill" id="habitProgressFill" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="habit-list" id="list-habits"></div>
+      </section>
+
+      <section class="view wide" id="view-habit-detail">
+        <button class="detail-back" id="habitDetailBack">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+          Habits
+        </button>
+        <div class="detail-header">
+          <div class="detail-heading">
+            <div class="habit-icon" id="detailIcon"></div>
+            <div>
+              <h1 class="detail-title" id="detailTitle"></h1>
+              <div class="detail-meta" id="detailMeta"></div>
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button class="icon-btn" id="detailEditBtn" title="編集">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+            </button>
+            <button class="icon-btn danger" id="detailDeleteBtn" title="削除">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"></path><path d="M19 6l-.8 13.4A2 2 0 0 1 16.2 21H7.8a2 2 0 0 1-2-1.6L5 6"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="stat-grid" id="statGrid"></div>
+
+        <div class="calendar-block">
+          <div class="calendar-nav">
+            <div class="calendar-month-label" id="calendarMonthLabel"></div>
+            <div class="calendar-nav-btns">
+              <button class="icon-btn" id="calendarPrevBtn" title="前の月">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+              </button>
+              <button class="icon-btn" id="calendarNextBtn" title="次の月">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+              </button>
+            </div>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+          <div class="calendar-legend">
+            <span class="calendar-legend-item"><span class="legend-swatch done"></span>達成</span>
+            <span class="calendar-legend-item"><span class="legend-swatch missed"></span>未達成</span>
+            <span class="calendar-legend-item"><span class="legend-swatch future"></span>未来</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="view-header">
+          <div class="view-title-row">
+            <h1 class="view-title">Settings</h1>
+          </div>
+          <div class="view-subtitle">表示とデータの管理</div>
+        </div>
+
+        <div class="settings-block">
+          <h3>外観</h3>
+          <p class="hint">端末やお好みに合わせてテーマを選べます。</p>
+          <div class="settings-row">
+            <div>
+              <div class="settings-row-label">テーマ</div>
+              <div class="settings-row-desc">「システム」は端末の設定に自動で合わせます</div>
+            </div>
+            <div class="segmented" id="themeSegmented">
+              <button data-theme-choice="light">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.5v2M12 19.5v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2.5 12h2M19.5 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+                Light
+              </button>
+              <button data-theme-choice="system" class="active">System</button>
+              <button data-theme-choice="dark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.5 14.5a8.5 8.5 0 1 1-9-11 7 7 0 0 0 9 11z"></path></svg>
+                Dark
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-block">
+          <h3>キャラクター</h3>
+          <p class="hint">Home画面に表示されるキャラクターを選べます。</p>
+          <div class="settings-row">
+            <div>
+              <div class="settings-row-label">表示モード</div>
+              <div class="settings-row-desc" id="characterModeDesc"></div>
+            </div>
+            <div class="segmented" id="characterModeSegmented">
+              <button data-char-mode="random">毎日ランダム</button>
+              <button data-char-mode="fixed">固定する</button>
+            </div>
+          </div>
+          <div class="character-picker" id="characterPicker"></div>
+        </div>
+
+        <div class="settings-block">
+          <h3>カテゴリー</h3>
+          <p class="hint">タスクの分類を管理します。</p>
+          <div id="categoryManageList" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:2px 12px;"></div>
+        </div>
+
+        <div class="settings-block">
+          <h3>通知</h3>
+          <div class="settings-row">
+            <div>
+              <div class="settings-row-label">期限のリマインダー</div>
+              <div class="settings-row-desc">タスクの期限が近づいたらブラウザ通知でお知らせします</div>
+            </div>
+            <div class="segmented" id="notifySegmented">
+              <button data-notify-choice="off">オフ</button>
+              <button data-notify-choice="on" class="active">オン</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-block">
+          <h3>データ</h3>
+          <p class="hint">タスクと習慣のデータをファイルに書き出し、別の端末に読み込めます。</p>
+          <div class="settings-row">
+            <div>
+              <div class="settings-row-label">エクスポート / インポート</div>
+              <div class="settings-row-desc">JSON形式でバックアップできます</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-ghost" id="exportBtn" style="border:1px solid var(--border);">書き出す</button>
+              <button class="btn btn-ghost" id="importBtn" style="border:1px solid var(--border);">読み込む</button>
+              <input type="file" id="importFile" accept="application/json" class="hidden">
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <nav class="mobile-tabbar" id="mobileTabbar">
+    <button data-view="today" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"></path><path d="M5 9.5V20a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V9.5"></path></svg>
+      Home
+    </button>
+    <button data-view="inbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+      Inbox
+    </button>
+    <button data-view="upcoming">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>
+      Upcoming
+    </button>
+    <button data-view="habits">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"></path></svg>
+      Habits
+    </button>
+    <button data-view="completed">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.3 12.3l2.4 2.4 5-5"></path></svg>
+      Done
+    </button>
+  </nav>
+
+  <button class="fab" id="fabAdd" aria-label="タスクを追加">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+  </button>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-body">
+      <input type="text" class="modal-title-input" id="taskNameInput" placeholder="タスク名を入力" maxlength="120" aria-label="タスク名">
+      <div class="field-row">
+        <label class="field-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>
+          <input type="date" id="taskDateInput">
+        </label>
+        <label class="field-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.3 2"></path></svg>
+          <input type="time" id="taskTimeInput">
+        </label>
+        <label class="field-pill select-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+          <select id="taskCategorySelect"></select>
+        </label>
+      </div>
+      <div class="field-row" style="padding-bottom:12px;">
+        <div class="priority-picker" id="priorityPicker">
+          <button type="button" data-priority="low"><span class="priority-dot low"></span>低</button>
+          <button type="button" data-priority="medium" class="active"><span class="priority-dot medium"></span>中</button>
+          <button type="button" data-priority="high"><span class="priority-dot high"></span>高</button>
+        </div>
+      </div>
+      <textarea class="modal-note" id="taskNoteInput" placeholder="メモを追加（任意）" rows="2" aria-label="メモ"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger-text hidden" id="deleteTaskBtn">タスクを削除</button>
+      <div class="modal-footer-right" style="margin-left:auto;">
+        <button class="btn btn-ghost" id="cancelModalBtn">キャンセル</button>
+        <button class="btn btn-primary" id="saveTaskBtn" disabled>追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="habitModalOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-body">
+      <input type="text" class="modal-title-input" id="habitNameInput" placeholder="Habit name" maxlength="80" aria-label="Habit name">
+
+      <span class="field-label">Icon（任意）</span>
+      <div class="icon-picker" id="habitIconPicker"></div>
+
+      <span class="field-label">Category</span>
+      <div class="field-row" style="padding-bottom:16px;">
+        <label class="field-pill select-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+          <select id="habitCategorySelect"></select>
+        </label>
+        <label class="field-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>
+          Start
+          <input type="date" id="habitStartInput">
+        </label>
+      </div>
+
+      <span class="field-label">Frequency</span>
+      <div class="field-row">
+        <div class="segmented-field" id="habitFrequencyPicker">
+          <button type="button" data-freq="daily" class="active">Every day</button>
+          <button type="button" data-freq="weekdays">Weekdays</button>
+          <button type="button" data-freq="weekends">Weekends</button>
+          <button type="button" data-freq="custom">Custom</button>
+        </div>
+      </div>
+      <div class="weekday-picker hidden" id="habitWeekdayPicker">
+        <button type="button" class="weekday-chip" data-day="1">Mon</button>
+        <button type="button" class="weekday-chip" data-day="2">Tue</button>
+        <button type="button" class="weekday-chip" data-day="3">Wed</button>
+        <button type="button" class="weekday-chip" data-day="4">Thu</button>
+        <button type="button" class="weekday-chip" data-day="5">Fri</button>
+        <button type="button" class="weekday-chip" data-day="6">Sat</button>
+        <button type="button" class="weekday-chip" data-day="0">Sun</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger-text hidden" id="deleteHabitBtn">習慣を削除</button>
+      <div class="modal-footer-right" style="margin-left:auto;">
+        <button class="btn btn-ghost" id="cancelHabitModalBtn">キャンセル</button>
+        <button class="btn btn-primary" id="saveHabitBtn" disabled>追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
