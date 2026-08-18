@@ -1529,8 +1529,10 @@
       $('#projectDescInput').value = '';
       $('#projectDeadlineInput').value = '';
       $('#saveProjectBtn').innerHTML = '作成';
+      $('#saveProjectBtn').disabled = true;
     }
     renderProjectIconPicker();
+    if (projectId) $('#saveProjectBtn').disabled = false;
     openModal(overlay, $('#projectNameInput'));
   }
 
@@ -2198,6 +2200,9 @@
 
   /* ---------- Projects ---------- */
 
+  $('#projectNameInput').addEventListener('input', () => {
+    $('#saveProjectBtn').disabled = $('#projectNameInput').value.trim().length === 0;
+  });
   $('#addProjectBtn').addEventListener('click', () => openProjectModal());
   $('#cancelProjectModalBtn').addEventListener('click', closeProjectModal);
   $('#saveProjectBtn').addEventListener('click', saveProject);
