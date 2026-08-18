@@ -50,7 +50,7 @@
           Completed <span class="count" data-count="completed"></span>
         </button>
         <button class="nav-item" data-view="projects">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 9h6M9 15h6M9 12h6"></path></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 12.5 9 5 9-5"></path><path d="m3 16.5 9 5 9-5"></path></svg>
           Projects <span class="count" data-count="projects"></span>
         </button>
         <div class="nav-divider"></div>
@@ -154,6 +154,14 @@
             <div class="task-list" id="list-today-habits"></div>
           </div>
 
+          <div class="home-card home-card-projects hidden" id="homeProjectsCard">
+            <div class="home-card-header">
+              <h2 class="section-heading">Your Projects</h2>
+              <button class="card-link" data-view-link="projects">View all</button>
+            </div>
+            <div class="home-project-list" id="homeProjectList"></div>
+          </div>
+
           <div class="home-footer-row">
             <div class="home-card home-card-streak" id="homeStreakCard">
               <div class="home-card-header">
@@ -170,14 +178,6 @@
               </div>
               <div id="homeUpcomingList"></div>
             </div>
-          </div>
-
-          <div class="home-card home-card-projects" id="homeProjectsBlock" style="display:none;">
-            <div class="home-card-header">
-              <h2 class="section-heading">Your Projects</h2>
-              <button class="card-link" data-view-link="projects">View all</button>
-            </div>
-            <div id="homeProjectsList"></div>
           </div>
         </div>
       </section>
@@ -221,15 +221,13 @@
             <button class="add-task-btn" id="addProjectBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New project</button>
           </div>
           <div class="view-subtitle">大きな目標を、ひとつずつ進めよう。</div>
-        </div>
-        <div class="projects-view-content">
-          <div class="segmented" id="projectViewToggle" style="margin-bottom: 20px;">
+          <div class="segmented" id="projectViewToggle" style="margin-top: 20px;">
             <button data-project-view="active" class="active">Active</button>
             <button data-project-view="history">History</button>
           </div>
-          <div class="projects-list" id="projectsList"></div>
-          <div class="projects-list" id="projectsHistoryList" style="display: none;"></div>
         </div>
+        <div class="project-grid" id="list-projects"></div>
+        <div class="project-grid" id="list-projects-history" style="display: none;"></div>
       </section>
 
       <section class="view wide" id="view-project-detail">
@@ -258,24 +256,24 @@
           </div>
         </div>
 
-        <div class="project-progress-block">
-          <div class="project-progress-row">
-            <div class="project-progress-pct" id="projectProgressPct">0%</div>
-            <div class="project-progress-track"><div class="project-progress-fill" id="projectProgressFill" style="width:0%"></div></div>
+        <p class="project-detail-desc" id="projectDetailDesc"></p>
+
+        <div class="project-detail-progress">
+          <div class="project-progress-head">
+            <span class="project-progress-label">Progress</span>
+            <span class="project-progress-count" id="projectDetailCount"></span>
           </div>
-          <div class="project-progress-label" id="projectProgressLabel">0 / 0 tasks completed</div>
+          <div class="project-progress-row">
+            <div class="project-progress-pct" id="projectDetailPct">0%</div>
+            <div class="project-bar lg"><div class="project-bar-fill" id="projectDetailFill" style="width:0%"></div></div>
+          </div>
         </div>
 
-        <div class="project-detail-content">
-          <div class="project-detail-section">
-            <h3>Tasks</h3>
-            <button class="btn btn-ghost" id="addTaskToProjectBtn" style="border:1px solid var(--border); width:100%; margin-bottom:16px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
-              Add task
-            </button>
-            <div class="task-list" id="projectTasksList"></div>
-          </div>
+        <div class="project-tasks-head">
+          <h2 class="section-heading">Tasks</h2>
+          <button class="add-task-btn" id="addProjectTaskBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add task</button>
         </div>
+        <div class="task-list" id="list-project-tasks"></div>
       </section>
 
       <section class="view" id="view-habits">
@@ -447,6 +445,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>
       Upcoming
     </button>
+    <button data-view="projects">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 12.5 9 5 9-5"></path><path d="m3 16.5 9 5 9-5"></path></svg>
+      Projects
+    </button>
     <button data-view="habits">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"></path></svg>
       Habits
@@ -480,8 +482,8 @@
           <select id="taskCategorySelect"></select>
         </label>
         <label class="field-pill select-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 9h6M9 15h6M9 12h6"></path></svg>
-          <select id="taskProjectSelect"></select>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 12.5 9 5 9-5"></path><path d="m3 16.5 9 5 9-5"></path></svg>
+          <select id="taskProjectSelect" aria-label="プロジェクト"></select>
         </label>
       </div>
       <div class="field-row" style="padding-bottom:12px;">
@@ -576,24 +578,27 @@
   <div class="modal" role="dialog" aria-modal="true">
     <div class="modal-body">
       <input type="text" class="modal-title-input" id="projectNameInput" placeholder="Project name" maxlength="80" aria-label="Project name">
-      <textarea class="modal-note" id="projectDescInput" placeholder="Description（任意）" rows="2" aria-label="Description"></textarea>
-      <div class="field-row">
+
+      <span class="field-label">Description（任意）</span>
+      <textarea class="modal-note" id="projectDescInput" placeholder="どんな目標かをひとことで" rows="2" aria-label="Description"></textarea>
+
+      <span class="field-label">Icon（任意）</span>
+      <div class="icon-picker" id="projectIconPicker"></div>
+
+      <span class="field-label">Deadline（任意）</span>
+      <div class="field-row" style="padding-bottom:8px;">
         <label class="field-pill">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>
-          Deadline（任意）
           <input type="date" id="projectDeadlineInput">
         </label>
-      </div>
-      <div class="field-row">
-        <span class="field-label">Icon（任意）</span>
-        <div class="icon-picker" id="projectIconPicker"></div>
+        <button type="button" class="btn btn-ghost" id="projectDeadlineClear" style="border:1px solid var(--border);">期限なし</button>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn-danger-text hidden" id="deleteProjectBtn">プロジェクトを削除</button>
       <div class="modal-footer-right" style="margin-left:auto;">
         <button class="btn btn-ghost" id="cancelProjectModalBtn">キャンセル</button>
-        <button class="btn btn-primary" id="saveProjectBtn" disabled>作成</button>
+        <button class="btn btn-primary" id="saveProjectBtn" disabled>追加</button>
       </div>
     </div>
   </div>

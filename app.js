@@ -1,21 +1,15 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'todoAppDataV3';
-  const OLD_STORAGE_KEY_V2 = 'todoAppDataV2';
+  const STORAGE_KEY = 'todoAppDataV2';
   const OLD_STORAGE_KEY = 'todoAppData';
+  const ABANDONED_KEY = 'todoAppDataV3';
 
   const CATEGORIES = [
     { key: 'work', label: 'Work', color: '#4c7ef0' },
     { key: 'personal', label: 'Personal', color: '#ef9b3d' },
     { key: 'study', label: 'Study', color: '#9b7ee0' },
     { key: 'health', label: 'Health', color: '#3fae87' },
-  ];
-
-  const PROJECT_ICONS = [
-    '📋', '🎯', '💼', '🏢', '🎨', '🎬', '📱', '💻',
-    '🎓', '📚', '✈️', '🏠', '🍽️', '🎪', '🌍', '🚀',
-    '🎮', '🎵', '📊', '🔧', '📸', '🌱', '⚡', '🎁',
   ];
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -62,7 +56,7 @@
   function normalizeTask(t) {
     if (!t || typeof t !== 'object') return null;
     if (typeof t.title !== 'string' || !t.title.trim()) return null;
-    const normalized = {
+    const out = {
       id: typeof t.id === 'string' && t.id ? t.id : ('t' + Date.now() + Math.random().toString(16).slice(2)),
       title: t.title,
       date: typeof t.date === 'string' && DATE_RE.test(t.date) ? t.date : '',
@@ -73,8 +67,10 @@
       completed: !!t.completed,
       completedAt: typeof t.completedAt === 'string' && DATE_RE.test(t.completedAt) ? t.completedAt : undefined,
     };
-    if (typeof t.projectId === 'string' && t.projectId) normalized.projectId = t.projectId;
-    return normalized;
+    // Optional, and absent on every task written before Projects existed — so it
+    // stays off the object entirely rather than becoming an explicit undefined.
+    if (typeof t.projectId === 'string' && t.projectId) out.projectId = t.projectId;
+    return out;
   }
 
   /** Coerces one loaded/imported habit into a well-formed shape. Returns null for unusable entries. */
@@ -101,7 +97,9 @@
     return out;
   }
 
-  /** Coerces one loaded/imported project into a well-formed shape. Returns null for unusable entries. */
+  /** Coerces one loaded/imported project into a well-formed shape. Returns null for unusable entries.
+   *  Note there is no task list here: a project's tasks are always derived from
+   *  `task.projectId`, so there is only ever one copy of that relationship to keep correct. */
   function normalizeProject(p) {
     if (!p || typeof p !== 'object') return null;
     if (typeof p.name !== 'string' || !p.name.trim()) return null;
@@ -109,9 +107,10 @@
       id: typeof p.id === 'string' && p.id ? p.id : ('p' + Date.now() + Math.random().toString(16).slice(2)),
       name: p.name,
       description: typeof p.description === 'string' ? p.description : '',
-      icon: typeof p.icon === 'string' ? p.icon : null,
-      status: (p.status === 'completed') ? 'completed' : 'active',
-      taskIds: Array.isArray(p.taskIds) ? p.taskIds.filter(id => typeof id === 'string') : [],
+      // Unknown keys are kept as-is and fall back to the default glyph at render
+      // time, so an icon set that grows later never invalidates saved projects.
+      icon: typeof p.icon === 'string' && p.icon ? p.icon : null,
+      status: p.status === 'completed' ? 'completed' : 'active',
       createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
     };
     if (typeof p.deadline === 'string' && DATE_RE.test(p.deadline)) out.deadline = p.deadline;
@@ -204,50 +203,63 @@
     }
   }
 
-  function migrateFromV2() {
-    const raw = localStorage.getItem(OLD_STORAGE_KEY_V2);
-    if (!raw) return null;
-    try {
-      const old = JSON.parse(raw);
-      const tasks = (Array.isArray(old.tasks) ? old.tasks : []).map(normalizeTask).filter(Boolean);
-      const habits = (Array.isArray(old.habits) ? old.habits : []).map(normalizeHabit).filter(Boolean);
-      return { tasks, habits, settings: normalizeSettings(old.settings || {}) };
-    } catch (e) {
-      return null;
-    }
-  }
-
   // Set when saved data exists but fails to parse, so the user finds out their
   // data didn't silently vanish. Read (and shown) once the rest of the module —
   // including showToast's own `let toastTimer` — has finished initializing;
   // loadState() runs too early in the file to safely call showToast() itself.
   let dataLoadCorrupted = false;
 
+  /** A task may only point at a project that actually exists. Anything else — a
+   *  half-restored backup, a hand-edited export — is downgraded to a plain task
+   *  rather than left pointing into nothing. */
+  function pruneDanglingProjectIds(taskList, projectList) {
+    const ids = new Set(projectList.map(p => p.id));
+    taskList.forEach(t => { if (t.projectId && !ids.has(t.projectId)) delete t.projectId; });
+    return taskList;
+  }
+
+  function buildState(parsed) {
+    const tasks = dedupeIds((Array.isArray(parsed.tasks) ? parsed.tasks : []).map(normalizeTask).filter(Boolean), new Set());
+    const habits = dedupeIds((Array.isArray(parsed.habits) ? parsed.habits : []).map(normalizeHabit).filter(Boolean), new Set());
+    const projects = dedupeIds((Array.isArray(parsed.projects) ? parsed.projects : []).map(normalizeProject).filter(Boolean), new Set());
+    return {
+      tasks: pruneDanglingProjectIds(tasks, projects),
+      habits,
+      projects,
+      settings: normalizeSettings(parsed.settings),
+    };
+  }
+
+  /** An earlier, short-lived build of Projects saved under its own key instead of
+   *  extending V2. Where that key exists it holds strictly newer data than V2 (it
+   *  was seeded from V2), so fold it back in once and drop it — left in place it
+   *  would shadow every future V2 write. */
+  function reclaimAbandonedKey() {
+    const raw = localStorage.getItem(ABANDONED_KEY);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.habits)) return null;
+      const state = buildState(parsed);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.removeItem(ABANDONED_KEY); // only after the copy is safely committed
+      return state;
+    } catch (e) { return null; }
+  }
+
   function loadState() {
+    const reclaimed = reclaimAbandonedKey();
+    if (reclaimed) return reclaimed;
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
-        const parsed = JSON.parse(raw);
-        const tasks = dedupeIds((Array.isArray(parsed.tasks) ? parsed.tasks : []).map(normalizeTask).filter(Boolean), new Set());
-        const habits = dedupeIds((Array.isArray(parsed.habits) ? parsed.habits : []).map(normalizeHabit).filter(Boolean), new Set());
-        const projects = dedupeIds((Array.isArray(parsed.projects) ? parsed.projects : []).map(normalizeProject).filter(Boolean), new Set());
-        return {
-          tasks,
-          habits,
-          projects,
-          settings: normalizeSettings(parsed.settings),
-        };
+        return buildState(JSON.parse(raw));
       } catch (e) { dataLoadCorrupted = true; /* fall through to a fresh/migrated state */ }
     }
-    const migratedV2 = migrateFromV2();
-    if (migratedV2) {
-      const state = { tasks: migratedV2.tasks, habits: migratedV2.habits, projects: [], settings: migratedV2.settings };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      return state;
-    }
-    const migratedV1 = migrateFromV1();
-    if (migratedV1) {
-      const state = { tasks: migratedV1.tasks, habits: migratedV1.habits, projects: [], settings: {} };
+    const migrated = migrateFromV1();
+    if (migrated) {
+      const state = { tasks: migrated.tasks, habits: migrated.habits, projects: [], settings: {} };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       return state;
     }
@@ -301,6 +313,31 @@
   const iconFlame = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c4 0 6.5-2.5 6.5-6 0-3-2-4.8-3-7.5-.5 1.5-1.3 2.3-2 2.3-1 0-1-1.5-1-3-2.5 2-4 5-4 8.2 0 3.5 2.5 6 3.5 6Z"></path></svg>';
   const iconBolt = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"></path></svg>';
   const iconCalendarSmall = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path></svg>';
+  const iconLayers = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 12.5 9 5 9-5"></path><path d="m3 16.5 9 5 9-5"></path></svg>';
+
+  /* ---------- Project icons ----------
+     Same line-art vocabulary as HABIT_ICONS so a project reads as part of the same
+     app, not a sticker pasted on top. Icons stay optional: `iconLayers` is the
+     default, and an unrecognised saved key falls back to it rather than breaking. */
+
+  const PROJECT_ICONS = {
+    target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="4.3"></circle><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"></circle></svg>',
+    flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 21V3.5"></path><path d="M5.5 4.6h11.8l-2.4 4 2.4 4H5.5"></path></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.4 2.7 5.5 6 .9-4.35 4.25 1.03 6-5.38-2.83L6.6 20.05l1.03-6L3.28 9.8l6.02-.9Z"></path></svg>',
+    rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6c3.2 2.6 4.9 6.1 4.9 9.8v3.4H7.1v-3.4c0-3.7 1.7-7.2 4.9-9.8Z"></path><circle cx="12" cy="10" r="2.1"></circle><path d="M7.1 14.2 4.4 16.9v3.3l2.9-1.7M16.9 14.2l2.7 2.7v3.3l-2.9-1.7"></path></svg>',
+    briefcase: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="7" width="18.4" height="13" rx="2.2"></rect><path d="M9 7V5.3A1.3 1.3 0 0 1 10.3 4h3.4A1.3 1.3 0 0 1 15 5.3V7"></path><path d="M2.8 12.6h18.4"></path></svg>',
+    book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5C4.7 20 4 19.3 4 18.5Z"></path><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H13v16h5.5c.8 0 1.5-.7 1.5-1.5Z"></path></svg>',
+    palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4c-4.9 0-8.8 3.7-8.8 8.4 0 4.5 3.6 7.5 7.2 7.5 1.6 0 2.3-.9 2.3-1.9 0-1.3-1.1-1.6-1.1-2.6 0-.9.7-1.6 1.8-1.6h1.8c3 0 5.6-2.2 5.6-5.1 0-3-3.6-4.7-8.8-4.7Z"></path><circle cx="7.8" cy="11.4" r="1.1"></circle><circle cx="10.6" cy="7.9" r="1.1"></circle><circle cx="14.8" cy="8.2" r="1.1"></circle></svg>',
+    cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.6" cy="19.4" r="1.5"></circle><circle cx="17.2" cy="19.4" r="1.5"></circle><path d="M2.6 3.6h2.7l2.5 12h11"></path><path d="M6.6 7.2h14.3l-1.6 6.5H7.9"></path></svg>',
+    plane: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 3.4 3.7 10.2c-.75.3-.72 1.38.05 1.63l5.2 1.7 1.7 5.2c.25.77 1.33.8 1.63.05Z"></path><path d="m8.95 13.53 4.6-4.6"></path></svg>',
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"></path><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"></path><path d="M9.5 21v-6h5v6"></path></svg>',
+  };
+  const PROJECT_ICON_ORDER = ['target', 'flag', 'star', 'rocket', 'briefcase', 'book', 'palette', 'cart', 'plane', 'home'];
+  const PROJECT_ICON_LABELS = {
+    target: '目標', flag: '旗', star: '星', rocket: 'ロケット', briefcase: '仕事',
+    book: '学習', palette: '制作', cart: '買い物', plane: '旅行', home: '住まい',
+  };
+  function projectIconSvg(p) { return (p && p.icon && PROJECT_ICONS[p.icon]) || iconLayers; }
 
   function greetingText() {
     const h = new Date().getHours();
@@ -576,6 +613,36 @@
 
   function catInfo(key) { return CATEGORIES.find(c => c.key === key); }
 
+  /* ---------- Project helpers ----------
+     A project never stores its own task list. Membership lives on `task.projectId`
+     alone and everything below is derived from it, so a project's progress and the
+     task lists in Today / Upcoming / Completed can never disagree. */
+
+  function projectById(id) { return id ? projects.find(p => p.id === id) : undefined; }
+  function projectTasks(id) { return tasks.filter(t => t.projectId === id); }
+  function activeProjects() { return projects.filter(p => p.status !== 'completed'); }
+
+  function projectStats(id) {
+    const list = projectTasks(id);
+    const done = list.filter(t => t.completed).length;
+    return { total: list.length, done, pct: list.length ? Math.round((done / list.length) * 100) : 0 };
+  }
+
+  /** Deadline presentation. Returns null when none is set so callers render nothing
+   *  at all — an unset deadline must never surface as a placeholder date. */
+  function projectDeadline(p) {
+    if (!p.deadline) return null;
+    const today = todayStr();
+    const daysLeft = Math.round((new Date(p.deadline + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+    const label = new Date(p.deadline + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+    // Only a finished project stops being "late"; the tone stays soft either way —
+    // amber for approaching, and red reserved for genuinely overdue.
+    if (p.status === 'completed') return { label, tone: '' };
+    if (daysLeft < 0) return { label, tone: 'overdue', note: '期限切れ' };
+    if (daysLeft <= 3) return { label, tone: 'soon', note: 'Due soon' };
+    return { label, tone: '' };
+  }
+
   /* ---------- Task helpers ---------- */
 
   function isOverdue(t) {
@@ -589,7 +656,9 @@
   }
   function priorityLabel(p) { return { high: '高', medium: '中', low: '低' }[p]; }
 
-  function buildMetaChips(t) {
+  /** `showProject` is off inside a project's own task list, where repeating the
+   *  project name on every row would be noise. */
+  function buildMetaChips(t, { showProject = true } = {}) {
     let html = '';
     if (t.date && !t.completed && t.date < todayStr()) {
       html += `<span class="meta-chip overdue">${iconCalendarSmall}${escapeHtml(formatDateJP(t.date))} 期限切れ</span>`;
@@ -599,10 +668,14 @@
     html += `<span class="meta-chip"><span class="priority-dot ${priority}"></span>優先度: ${priorityLabel(priority)}</span>`;
     const c = catInfo(t.category);
     if (c) html += `<span class="cat-chip" style="--dot:${c.color}"><span class="cat-dot"></span>${escapeHtml(c.label)}</span>`;
+    if (showProject) {
+      const p = projectById(t.projectId);
+      if (p) html += `<span class="project-chip">${projectIconSvg(p)}${escapeHtml(p.name)}</span>`;
+    }
     return html;
   }
 
-  function createTaskRow(t) {
+  function createTaskRow(t, opts = {}) {
     const row = document.createElement('div');
     row.className = 'task-row' + (t.completed ? ' done' : '');
     row.dataset.id = t.id;
@@ -622,7 +695,7 @@
     titleEl.textContent = t.title;
     const metaEl = document.createElement('div');
     metaEl.className = 'task-meta';
-    metaEl.innerHTML = buildMetaChips(t);
+    metaEl.innerHTML = buildMetaChips(t, opts);
     mainEl.appendChild(titleEl);
     mainEl.appendChild(metaEl);
     mainEl.addEventListener('click', () => openEditModal(t.id));
@@ -1249,6 +1322,263 @@
     }
   });
 
+  /* ---------- Projects ---------- */
+
+  /** Nearest deadline first, then undated newest-first — so what needs attention
+   *  sits at the top without any manual ordering. */
+  function sortActiveProjects(a, b) {
+    if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
+    if (a.deadline) return -1;
+    if (b.deadline) return 1;
+    return b.createdAt - a.createdAt;
+  }
+
+  function createProjectCard(p) {
+    const stats = projectStats(p.id);
+    const due = projectDeadline(p);
+    const isDone = p.status === 'completed';
+
+    const card = document.createElement('div');
+    card.className = 'project-card' + (isDone ? ' is-complete' : '');
+    card.dataset.id = p.id;
+
+    const icon = document.createElement('div');
+    icon.className = 'project-icon';
+    icon.innerHTML = projectIconSvg(p);
+
+    const head = document.createElement('div');
+    head.className = 'project-card-head';
+    const titleWrap = document.createElement('div');
+    titleWrap.className = 'project-card-title-wrap';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'project-card-name';
+    nameEl.textContent = p.name;
+    const subEl = document.createElement('div');
+    subEl.className = 'project-card-sub';
+    subEl.textContent = stats.total === 0 ? 'No tasks yet' : `${stats.done} / ${stats.total} tasks completed`;
+    titleWrap.appendChild(nameEl);
+    titleWrap.appendChild(subEl);
+    head.appendChild(icon);
+    head.appendChild(titleWrap);
+
+    const progress = document.createElement('div');
+    progress.className = 'project-card-progress';
+    progress.innerHTML = `<div class="project-bar"><div class="project-bar-fill" style="width:${stats.pct}%"></div></div><span class="project-pct">${stats.pct}%</span>`;
+
+    card.appendChild(head);
+    card.appendChild(progress);
+
+    const footBits = [];
+    if (isDone) {
+      const at = p.completedAt ? new Date(p.completedAt + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' }) : '';
+      footBits.push(`<span class="project-foot-chip done">${iconCheck}Completed${at ? ' · ' + escapeHtml(at) : ''}</span>`);
+    } else if (due) {
+      footBits.push(`<span class="project-foot-chip ${due.tone}">${iconCalendarSmall}Deadline · ${escapeHtml(due.label)}</span>`);
+      if (due.note) footBits.push(`<span class="project-foot-note ${due.tone}">${escapeHtml(due.note)}</span>`);
+    }
+    if (footBits.length) {
+      const foot = document.createElement('div');
+      foot.className = 'project-card-foot';
+      foot.innerHTML = footBits.join('');
+      card.appendChild(foot);
+    }
+
+    card.addEventListener('click', () => openProjectDetail(p.id));
+    return card;
+  }
+
+  function renderProjects() {
+    const list = $('#list-projects');
+    const history = $('#list-projects-history');
+    list.innerHTML = '';
+    history.innerHTML = '';
+
+    const active = activeProjects().slice().sort(sortActiveProjects);
+    const completed = projects.filter(p => p.status === 'completed')
+      .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+
+    if (active.length === 0) {
+      const empty = emptyState(iconLayers, 'まだプロジェクトがありません', '大きな目標をプロジェクトとしてまとめてみましょう。');
+      // The header's "New project" button is hidden on phones (same as Add task /
+      // Add habit), so the empty state carries its own always-visible CTA.
+      const cta = document.createElement('button');
+      cta.className = 'btn btn-primary empty-cta';
+      cta.textContent = '+ New project';
+      cta.addEventListener('click', openAddProjectModal);
+      empty.appendChild(cta);
+      list.appendChild(empty);
+    } else {
+      active.forEach(p => list.appendChild(createProjectCard(p)));
+    }
+
+    if (completed.length === 0) {
+      history.appendChild(emptyState(iconLayers, '完了したプロジェクトはありません', 'プロジェクトを完了すると、ここに記録として残ります。'));
+    } else {
+      completed.forEach(p => history.appendChild(createProjectCard(p)));
+    }
+  }
+
+  function renderHomeProjects() {
+    const card = $('#homeProjectsCard');
+    const wrap = $('#homeProjectList');
+    const active = activeProjects().slice().sort(sortActiveProjects).slice(0, 3);
+    // Home stays a dashboard, not a second Projects page: hidden entirely for
+    // anyone not using the feature, and never more than three entries.
+    if (active.length === 0) { card.classList.add('hidden'); return; }
+    card.classList.remove('hidden');
+
+    wrap.innerHTML = '';
+    active.forEach(p => {
+      const stats = projectStats(p.id);
+      const due = projectDeadline(p);
+      const row = document.createElement('button');
+      row.className = 'home-project-item';
+      row.innerHTML = `
+        <span class="home-project-icon">${projectIconSvg(p)}</span>
+        <span class="home-project-main">
+          <span class="home-project-name"></span>
+          <span class="project-bar sm"><span class="project-bar-fill" style="width:${stats.pct}%"></span></span>
+        </span>
+        <span class="home-project-side">
+          <span class="home-project-pct">${stats.pct}%</span>
+          ${due ? `<span class="home-project-due ${due.tone}">${escapeHtml(due.label)}</span>` : ''}
+        </span>`;
+      row.querySelector('.home-project-name').textContent = p.name;
+      row.addEventListener('click', () => openProjectDetail(p.id));
+      wrap.appendChild(row);
+    });
+  }
+
+  /* ---------- Project detail ---------- */
+
+  function openProjectDetail(id) {
+    currentProjectDetailId = id;
+    switchView('project-detail');
+    renderProjectDetail();
+  }
+
+  function renderProjectDetail() {
+    const p = projectById(currentProjectDetailId);
+    if (!p) { switchView('projects'); return; }
+
+    const stats = projectStats(p.id);
+    const due = projectDeadline(p);
+    const isDone = p.status === 'completed';
+
+    $('#projectDetailIcon').innerHTML = projectIconSvg(p);
+    $('#projectDetailTitle').textContent = p.name;
+
+    let meta = '';
+    if (isDone) {
+      const at = p.completedAt ? new Date(p.completedAt + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+      meta += `<span class="meta-chip done-chip">${iconCheck}完了${at ? ' · ' + escapeHtml(at) : ''}</span>`;
+    }
+    if (p.deadline) {
+      const full = new Date(p.deadline + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+      meta += `<span class="meta-chip ${due && due.tone === 'overdue' ? 'overdue' : ''}">${iconCalendarSmall}Deadline · ${escapeHtml(full)}</span>`;
+      if (due && due.note) meta += `<span class="project-foot-note ${due.tone}">${escapeHtml(due.note)}</span>`;
+    }
+    $('#projectDetailMeta').innerHTML = meta;
+
+    const desc = $('#projectDetailDesc');
+    desc.textContent = p.description || '';
+    desc.classList.toggle('hidden', !p.description);
+
+    $('#projectDetailPct').textContent = `${stats.pct}%`;
+    $('#projectDetailFill').style.width = `${stats.pct}%`;
+    $('#projectDetailCount').textContent = stats.total === 0 ? 'No tasks yet' : `${stats.done} / ${stats.total} tasks completed`;
+
+    const completeBtn = $('#projectCompleteBtn');
+    completeBtn.title = isDone ? '進行中に戻す' : 'プロジェクトを完了';
+    completeBtn.classList.toggle('is-reopen', isDone);
+    // All tasks done is a cue to finish the project, never the finish itself —
+    // completing stays an explicit act so the two states remain distinguishable.
+    completeBtn.classList.toggle('suggest', !isDone && stats.total > 0 && stats.done === stats.total);
+
+    const list = $('#list-project-tasks');
+    list.innerHTML = '';
+    const own = projectTasks(p.id);
+    if (own.length === 0) {
+      list.appendChild(emptyState(ICON_CHECK_CIRCLE, 'タスクはまだありません', '「Add task」からこのプロジェクトのタスクを追加しましょう。', true));
+    } else {
+      const open = own.filter(t => !t.completed)
+        .sort((a, b) => (a.date || '9999-99-99').localeCompare(b.date || '9999-99-99'));
+      const done = own.filter(t => t.completed);
+      open.forEach(t => list.appendChild(createTaskRow(t, { showProject: false })));
+      if (done.length) {
+        const block = document.createElement('div');
+        block.className = 'group-block';
+        block.innerHTML = `<div class="group-eyebrow">完了済み（${done.length}）</div>`;
+        const inner = document.createElement('div');
+        inner.className = 'task-list';
+        done.forEach(t => inner.appendChild(createTaskRow(t, { showProject: false })));
+        block.appendChild(inner);
+        list.appendChild(block);
+      }
+    }
+  }
+
+  /* ---------- Project mutations ---------- */
+
+  function completeProject(id) {
+    const p = projectById(id);
+    if (!p) return;
+    p.status = 'completed';
+    p.completedAt = todayStr();
+    const ok = saveState();
+    renderAll();
+    if (ok) showToast('プロジェクトを完了しました。記録はHistoryに残ります。');
+  }
+
+  function reopenProject(id) {
+    const p = projectById(id);
+    if (!p) return;
+    p.status = 'active';
+    delete p.completedAt;
+    const ok = saveState();
+    renderAll();
+    if (ok) showToast('プロジェクトを進行中に戻しました');
+  }
+
+  /** Deleting a project removes the grouping only. Every task it held survives as
+   *  an ordinary todo with no project set. */
+  function deleteProject(id) {
+    projects = projects.filter(p => p.id !== id);
+    tasks.forEach(t => { if (t.projectId === id) delete t.projectId; });
+    const ok = saveState();
+    switchView('projects');
+    renderAll();
+    if (ok) showToast('プロジェクトを削除しました。タスクはそのまま残っています。');
+  }
+
+  $('#projectDetailBack').addEventListener('click', () => switchView('projects'));
+  $('#projectEditBtn').addEventListener('click', () => openEditProjectModal(currentProjectDetailId));
+  $('#projectCompleteBtn').addEventListener('click', () => {
+    const p = projectById(currentProjectDetailId);
+    if (!p) return;
+    if (p.status === 'completed') { reopenProject(p.id); return; }
+    const stats = projectStats(p.id);
+    const remaining = stats.total - stats.done;
+    const msg = remaining > 0
+      ? `「${p.name}」を完了しますか？\n\n未完了のタスクが${remaining}件あります。\nタスクはそのまま残り、Todoとして引き続き使えます。`
+      : `「${p.name}」を完了しますか？\n\nActive一覧から外れ、Historyに記録として残ります。`;
+    if (confirm(msg)) completeProject(p.id);
+  });
+  $('#projectDeleteBtn').addEventListener('click', () => {
+    const p = projectById(currentProjectDetailId);
+    if (!p) return;
+    if (confirm('このプロジェクトを削除しますか？\n\nプロジェクトを削除しても、関連するタスクは削除されません。')) {
+      deleteProject(p.id);
+    }
+  });
+
+  $$('#projectViewToggle button').forEach(b => b.addEventListener('click', () => {
+    const view = b.dataset.projectView;
+    $$('#projectViewToggle button').forEach(btn => btn.classList.toggle('active', btn.dataset.projectView === view));
+    $('#list-projects').style.display = view === 'active' ? '' : 'none';
+    $('#list-projects-history').style.display = view === 'active' ? 'none' : '';
+  }));
+
   /* ---------- Sidebar / counts ---------- */
 
   function renderCounts() {
@@ -1259,6 +1589,7 @@
     $('[data-count="completed"]').textContent = tasks.filter(t => t.completed).length || '';
     const remainingHabits = habits.filter(h => isHabitScheduled(h, today) && !isHabitDone(h, today)).length;
     $('[data-count="habits"]').textContent = remainingHabits || '';
+    $('[data-count="projects"]').textContent = activeProjects().length || '';
   }
 
   function renderCategorySidebar() {
@@ -1295,326 +1626,15 @@
     sel.innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
   }
 
-  /* ---------- Projects ---------- */
-
-  function getProjectProgress(projectId) {
-    const proj = projects.find(p => p.id === projectId);
-    if (!proj) return { total: 0, completed: 0, percentage: 0 };
-    const total = proj.taskIds.length;
-    if (total === 0) return { total: 0, completed: 0, percentage: 0 };
-    const completed = proj.taskIds.filter(tid => tasks.find(t => t.id === tid && t.completed)).length;
-    const percentage = Math.round((completed / total) * 100);
-    return { total, completed, percentage };
-  }
-
-  function createProject(name, description, deadline, icon) {
-    const id = 'p' + Date.now() + Math.random().toString(16).slice(2);
-    const proj = {
-      id,
-      name,
-      description: description || '',
-      icon: icon || null,
-      status: 'active',
-      taskIds: [],
-      deadline: deadline || undefined,
-      createdAt: Date.now(),
-    };
-    projects.push(proj);
-    saveState();
-    return id;
-  }
-
-  function updateProject(projectId, updates) {
-    const proj = projects.find(p => p.id === projectId);
-    if (proj) {
-      Object.assign(proj, updates);
-      saveState();
-    }
-  }
-
-  function deleteProject(projectId) {
-    projects = projects.filter(p => p.id !== projectId);
-    tasks = tasks.map(t => t.projectId === projectId ? { ...t, projectId: undefined } : t);
-    saveState();
-  }
-
-  function completeProject(projectId) {
-    const proj = projects.find(p => p.id === projectId);
-    if (proj) {
-      proj.status = 'completed';
-      proj.completedAt = todayStr();
-      saveState();
-    }
-  }
-
-  function addTaskToProject(projectId, taskId) {
-    const proj = projects.find(p => p.id === projectId);
-    const task = tasks.find(t => t.id === taskId);
-    if (proj && task) {
-      if (!proj.taskIds.includes(taskId)) {
-        proj.taskIds.push(taskId);
-      }
-      task.projectId = projectId;
-      saveState();
-    }
-  }
-
-  function removeTaskFromProject(projectId, taskId) {
-    const proj = projects.find(p => p.id === projectId);
-    if (proj) {
-      proj.taskIds = proj.taskIds.filter(id => id !== taskId);
-      const task = tasks.find(t => t.id === taskId);
-      if (task) task.projectId = undefined;
-      saveState();
-    }
-  }
-
-  function renderProjectCard(proj) {
-    const progress = getProjectProgress(proj.id);
-    const deadline = proj.deadline ? new Date(proj.deadline + 'T00:00:00') : null;
-    const deadlineText = deadline ? `${deadline.getMonth() + 1}/${deadline.getDate()}` : '期限なし';
-    const icon = proj.icon || '📋';
-
-    const card = document.createElement('div');
-    card.className = 'project-card';
-    card.innerHTML = `
-      <div class="project-card-header">
-        <div class="project-card-icon">${icon}</div>
-        <div class="project-card-info">
-          <h3 class="project-card-title">${escapeHtml(proj.name)}</h3>
-          <div class="project-card-meta">${progress.completed} / ${progress.total} tasks</div>
-        </div>
-      </div>
-      <div class="project-card-progress">
-        <div class="progress-bar"><div class="progress-fill" style="width:${progress.percentage}%"></div></div>
-        <div class="progress-label">${progress.percentage}%</div>
-      </div>
-      <div class="project-card-footer">
-        <span class="project-card-deadline">${escapeHtml(deadlineText)}</span>
-      </div>
-    `;
-    card.addEventListener('click', () => showProjectDetail(proj.id));
-    return card;
-  }
-
-  function renderProjects() {
-    const list = $('#projectsList');
-    const historyList = $('#projectsHistoryList');
-    if (!list) return;
-
-    const activeProjects = projects.filter(p => p.status !== 'completed');
-    const historyProjects = projects.filter(p => p.status === 'completed');
-
-    list.innerHTML = '';
-    historyList.innerHTML = '';
-
-    if (activeProjects.length === 0) {
-      list.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">📭</div>
-          <p>まだプロジェクトがありません</p>
-          <p class="empty-hint">大きな目標をプロジェクトとしてまとめてみましょう。</p>
-        </div>
-      `;
-    } else {
-      activeProjects.forEach(proj => {
-        list.appendChild(renderProjectCard(proj));
-      });
-    }
-
-    if (historyProjects.length > 0) {
-      historyProjects.forEach(proj => {
-        historyList.appendChild(renderProjectCard(proj));
-      });
-    } else {
-      historyList.innerHTML = '<div class="empty-state"><p>完了したプロジェクトはありません</p></div>';
-    }
-
-    updateProjectCount();
-  }
-
-  function updateProjectCount() {
-    const activeCount = projects.filter(p => p.status !== 'completed').length;
-    const countEl = $('[data-count="projects"]');
-    if (countEl) {
-      countEl.innerHTML = activeCount > 0 ? `<span>${activeCount}</span>` : '';
-    }
-  }
-
-  function showProjectDetail(projectId) {
-    currentProjectDetailId = projectId;
-    switchView('project-detail');
-    renderProjectDetail();
-  }
-
-  function renderProjectDetail() {
-    const proj = projects.find(p => p.id === currentProjectDetailId);
-    if (!proj) {
-      switchView('projects');
-      return;
-    }
-
-    const progress = getProjectProgress(proj.id);
-    const icon = proj.icon || '📋';
-
-    $('#projectDetailIcon').innerHTML = icon;
-    $('#projectDetailTitle').innerHTML = escapeHtml(proj.name);
-
-    const metaHtml = `
-      <div class="detail-meta-row">
-        <div class="detail-meta-item">
-          <span class="detail-meta-label">Status</span>
-          <span class="detail-meta-value">${proj.status === 'completed' ? '完了' : '進行中'}</span>
-        </div>
-        ${proj.deadline ? `<div class="detail-meta-item">
-          <span class="detail-meta-label">Deadline</span>
-          <span class="detail-meta-value">${new Date(proj.deadline + 'T00:00:00').toLocaleDateString('ja-JP')}</span>
-        </div>` : ''}
-      </div>
-      ${proj.description ? `<div class="detail-meta-description">${escapeHtml(proj.description)}</div>` : ''}
-    `;
-    $('#projectDetailMeta').innerHTML = metaHtml;
-
-    $('#projectProgressPct').innerHTML = `${progress.percentage}%`;
-    $('#projectProgressFill').style.width = `${progress.percentage}%`;
-    $('#projectProgressLabel').innerHTML = `${progress.completed} / ${progress.total} tasks completed`;
-
-    const tasksList = $('#projectTasksList');
-    tasksList.innerHTML = '';
-    const projectTasks = tasks.filter(t => t.projectId === proj.id);
-    projectTasks.forEach(task => {
-      tasksList.appendChild(createTaskRow(task));
-    });
-
-    if (projectTasks.length === 0) {
-      tasksList.innerHTML = '<div class="empty-state"><p>タスクを追加してください</p></div>';
-    }
-
-    $('#projectCompleteBtn').style.display = proj.status === 'completed' ? 'none' : 'block';
-  }
-
-  function renderProjectIconPicker() {
-    const container = $('#projectIconPicker');
-    if (!container) return;
-    container.innerHTML = '';
-    const grid = document.createElement('div');
-    grid.className = 'icon-grid';
-    PROJECT_ICONS.forEach(icon => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'icon-option';
-      btn.innerHTML = icon;
-      btn.addEventListener('click', () => {
-        grid.querySelectorAll('.icon-option').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-      });
-      grid.appendChild(btn);
-    });
-    container.appendChild(grid);
-  }
-
-  function openProjectModal(projectId = null) {
-    const overlay = $('#projectModalOverlay');
-    if (projectId) {
-      editingProjectId = projectId;
-      const proj = projects.find(p => p.id === projectId);
-      if (!proj) return;
-      $('#projectNameInput').value = proj.name;
-      $('#projectDescInput').value = proj.description;
-      $('#projectDeadlineInput').value = proj.deadline || '';
-      $('#saveProjectBtn').innerHTML = '保存';
-    } else {
-      editingProjectId = null;
-      $('#projectNameInput').value = '';
-      $('#projectDescInput').value = '';
-      $('#projectDeadlineInput').value = '';
-      $('#saveProjectBtn').innerHTML = '作成';
-      $('#saveProjectBtn').disabled = true;
-    }
-    renderProjectIconPicker();
-    if (projectId) $('#saveProjectBtn').disabled = false;
-    openModal(overlay, $('#projectNameInput'));
-  }
-
-  function closeProjectModal() {
-    closeModal($('#projectModalOverlay'));
-  }
-
-  function saveProject() {
-    const name = $('#projectNameInput').value.trim();
-    if (!name) {
-      showToast('プロジェクト名を入力してください');
-      return;
-    }
-    const description = $('#projectDescInput').value.trim();
-    const deadline = $('#projectDeadlineInput').value || undefined;
-    const iconEl = $('#projectIconPicker').querySelector('.icon-option.active');
-    const icon = iconEl ? iconEl.innerHTML : null;
-
-    if (editingProjectId) {
-      updateProject(editingProjectId, { name, description, deadline, icon });
-      showToast('プロジェクトを更新しました');
-    } else {
-      createProject(name, description, deadline, icon);
-      showToast('プロジェクトを作成しました');
-    }
-    renderAll();
-    closeProjectModal();
-  }
-
-  function deleteProjectConfirm() {
-    if (!editingProjectId) return;
-    if (confirm('このプロジェクトを削除しますか？\nプロジェクトを削除しても、関連するタスクは削除されません。')) {
-      deleteProject(editingProjectId);
-      renderAll();
-      closeProjectModal();
-      showToast('プロジェクトを削除しました');
-    }
-  }
-
-  function populateProjectSelect(sel) {
-    if (!sel) return;
-    sel.innerHTML = '<option value="">プロジェクトなし</option>';
-    projects.filter(p => p.status !== 'completed').forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.name;
-      sel.appendChild(opt);
-    });
-  }
-
-  function renderHomeProjects() {
-    const activeProjects = projects.filter(p => p.status !== 'completed').slice(0, 3);
-    const container = $('#homeProjectsList');
-    const block = $('#homeProjectsBlock');
-    if (!container || !block) return;
-
-    if (activeProjects.length === 0) {
-      block.style.display = 'none';
-      return;
-    }
-
-    block.style.display = 'block';
-    container.innerHTML = '';
-    activeProjects.forEach(proj => {
-      const progress = getProjectProgress(proj.id);
-      const card = document.createElement('div');
-      card.className = 'home-project-item';
-      const icon = proj.icon || '📋';
-      card.innerHTML = `
-        <div class="home-project-name">
-          <span class="home-project-icon">${icon}</span>
-          <span>${escapeHtml(proj.name)}</span>
-        </div>
-        <div class="home-project-progress">
-          <div class="progress-bar"><div class="progress-fill" style="width:${progress.percentage}%"></div></div>
-        </div>
-        <div class="home-project-meta">${progress.percentage}% completed</div>
-      `;
-      card.style.cursor = 'pointer';
-      card.addEventListener('click', () => showProjectDetail(proj.id));
-      container.appendChild(card);
-    });
+  /** Only active projects are offered, plus `keepId` — the project the task being
+   *  edited already belongs to — so opening a task inside a finished project and
+   *  pressing save can never silently detach it. */
+  function populateProjectSelect(sel, keepId) {
+    const listed = activeProjects();
+    const kept = projectById(keepId);
+    if (kept && !listed.includes(kept)) listed.push(kept);
+    sel.innerHTML = '<option value="">プロジェクトなし</option>' +
+      listed.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
   }
 
   function renderAll() {
@@ -1632,26 +1652,22 @@
     renderCounts();
     renderCategorySidebar();
     renderCategoryManage();
-    populateProjectSelect($('#taskProjectSelect'));
+    // The open project detail is a view onto the same task data, so it refreshes
+    // with everything else — completing a task there updates its progress at once.
+    if (currentView === 'project-detail') renderProjectDetail();
   }
 
   /* ---------- Mutations ---------- */
 
   /** Single creation path for tasks — used by both the full modal and Quick Add. */
-  function createTask({ title, date = '', time = '', category = '', priority = 'medium', note = '', projectId = undefined }) {
+  function createTask({ title, date = '', time = '', category = '', priority = 'medium', note = '', projectId = '' }) {
     const task = {
       id: 't' + Date.now() + Math.random().toString(16).slice(2),
       title, date, time, category, note, priority,
       completed: false,
     };
-    if (projectId) task.projectId = projectId;
+    if (projectId && projectById(projectId)) task.projectId = projectId;
     tasks.push(task);
-    if (projectId) {
-      const proj = projects.find(p => p.id === projectId);
-      if (proj && !proj.taskIds.includes(task.id)) {
-        proj.taskIds.push(task.id);
-      }
-    }
     return task;
   }
 
@@ -1706,6 +1722,7 @@
     });
     $$('#mobileTabbar button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     if (!['today', 'inbox', 'upcoming', 'completed'].includes(view)) activeCategory = null;
+    syncFab();
     $('.main').scrollTo({ top: 0 });
   }
 
@@ -1722,6 +1739,7 @@
   const dateInput = $('#taskDateInput');
   const timeInput = $('#taskTimeInput');
   const catSelect = $('#taskCategorySelect');
+  const projectSelect = $('#taskProjectSelect');
   const noteInput = $('#taskNoteInput');
   const saveBtn = $('#saveTaskBtn');
   const deleteBtn = $('#deleteTaskBtn');
@@ -1739,14 +1757,16 @@
     dateInput.value = ['today', 'upcoming'].includes(currentView) ? todayStr() : '';
     timeInput.value = '';
     catSelect.value = activeCategory || CATEGORIES[0].key;
+    // Adding from inside a project means adding *to* that project — the field is
+    // still shown and still editable, just pre-filled with the obvious answer.
+    const presetProject = currentView === 'project-detail' ? currentProjectDetailId : '';
+    populateProjectSelect(projectSelect, presetProject);
+    projectSelect.value = presetProject || '';
     noteInput.value = '';
     setPriority('medium');
     saveBtn.textContent = '追加';
     saveBtn.disabled = true;
     deleteBtn.classList.add('hidden');
-    const projectSelect = $('#taskProjectSelect');
-    if (projectSelect && currentProjectDetailId) projectSelect.value = currentProjectDetailId;
-    else if (projectSelect) projectSelect.value = '';
     openModal(overlay, nameInput);
   }
   function openEditModal(id) {
@@ -1756,10 +1776,9 @@
     nameInput.value = t.title;
     dateInput.value = t.date || '';
     timeInput.value = t.time || '';
-    const projectSelect = $('#taskProjectSelect');
-    if (projectSelect && t.projectId) projectSelect.value = t.projectId;
-    else if (projectSelect) projectSelect.value = '';
     catSelect.value = t.category || CATEGORIES[0].key;
+    populateProjectSelect(projectSelect, t.projectId);
+    projectSelect.value = t.projectId || '';
     noteInput.value = t.note || '';
     setPriority(t.priority);
     saveBtn.textContent = '保存';
@@ -1775,23 +1794,32 @@
 
   nameInput.addEventListener('input', () => { saveBtn.disabled = nameInput.value.trim().length === 0; });
   $$('[data-add]').forEach(b => b.addEventListener('click', openAddModal));
-  $('#fabAdd').addEventListener('click', () => { if (currentView === 'habits' || currentView === 'habit-detail') openAddHabitModal(); else openAddModal(); });
+  // The header's Add buttons are hidden on phones, so the FAB is the only entry
+  // point there — it has to mean "add the thing this view is about". On a project's
+  // detail page that thing is still a task, which openAddModal pre-links.
+  const fabBtn = $('#fabAdd');
+  function fabAction() {
+    if (currentView === 'habits' || currentView === 'habit-detail') return { run: openAddHabitModal, label: '習慣を追加' };
+    if (currentView === 'projects') return { run: openAddProjectModal, label: 'プロジェクトを追加' };
+    return { run: openAddModal, label: 'タスクを追加' };
+  }
+  function syncFab() { fabBtn.setAttribute('aria-label', fabAction().label); }
+  fabBtn.addEventListener('click', () => fabAction().run());
   $('#cancelModalBtn').addEventListener('click', () => closeModal(overlay));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
 
   saveBtn.addEventListener('click', () => {
     const title = nameInput.value.trim();
     if (!title) return;
-    const projectSelect = $('#taskProjectSelect');
-    const projectId = projectSelect && projectSelect.value ? projectSelect.value : undefined;
     if (editingId) {
       const t = tasks.find(t => t.id === editingId);
       t.title = title; t.date = dateInput.value; t.time = timeInput.value;
       t.category = catSelect.value; t.note = noteInput.value; t.priority = currentPriority;
-      if (projectId) t.projectId = projectId; else delete t.projectId;
+      if (projectSelect.value && projectById(projectSelect.value)) t.projectId = projectSelect.value;
+      else delete t.projectId;
       showToast('タスクを更新しました');
     } else {
-      createTask({ title, date: dateInput.value, time: timeInput.value, category: catSelect.value, note: noteInput.value, priority: currentPriority, projectId });
+      createTask({ title, date: dateInput.value, time: timeInput.value, category: catSelect.value, note: noteInput.value, priority: currentPriority, projectId: projectSelect.value });
       showToast('タスクを追加しました');
     }
     saveState();
@@ -1964,6 +1992,111 @@
     }
   });
 
+  /* ---------- Project modal ---------- */
+
+  const projectOverlay = $('#projectModalOverlay');
+  const projectNameInput = $('#projectNameInput');
+  const projectDescInput = $('#projectDescInput');
+  const projectDeadlineInput = $('#projectDeadlineInput');
+  const projectSaveBtn = $('#saveProjectBtn');
+  const projectDeleteBtn = $('#deleteProjectBtn');
+  let currentProjectIcon = null;
+
+  function renderProjectIconPicker() {
+    const wrap = $('#projectIconPicker');
+    wrap.innerHTML = '';
+    PROJECT_ICON_ORDER.forEach(key => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const isActive = currentProjectIcon === key;
+      btn.className = 'icon-swatch' + (isActive ? ' active' : '');
+      btn.innerHTML = PROJECT_ICONS[key];
+      btn.setAttribute('aria-label', PROJECT_ICON_LABELS[key]);
+      btn.setAttribute('aria-pressed', String(isActive));
+      // Tapping the active icon clears it — an icon stays genuinely optional.
+      btn.addEventListener('click', () => { currentProjectIcon = isActive ? null : key; renderProjectIconPicker(); });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function validateProjectForm() {
+    projectSaveBtn.disabled = projectNameInput.value.trim().length === 0;
+  }
+
+  function openAddProjectModal() {
+    editingProjectId = null;
+    projectNameInput.value = '';
+    projectDescInput.value = '';
+    projectDeadlineInput.value = '';
+    currentProjectIcon = null;
+    renderProjectIconPicker();
+    projectSaveBtn.textContent = '追加';
+    projectDeleteBtn.classList.add('hidden');
+    validateProjectForm();
+    openModal(projectOverlay, projectNameInput);
+  }
+
+  function openEditProjectModal(id) {
+    const p = projectById(id);
+    if (!p) return;
+    editingProjectId = id;
+    projectNameInput.value = p.name;
+    projectDescInput.value = p.description || '';
+    projectDeadlineInput.value = p.deadline || '';
+    currentProjectIcon = p.icon || null;
+    renderProjectIconPicker();
+    projectSaveBtn.textContent = '保存';
+    projectDeleteBtn.classList.remove('hidden');
+    validateProjectForm();
+    openModal(projectOverlay, projectNameInput);
+  }
+
+  projectNameInput.addEventListener('input', validateProjectForm);
+  $('#addProjectBtn').addEventListener('click', openAddProjectModal);
+  $('#addProjectTaskBtn').addEventListener('click', openAddModal);
+  $('#cancelProjectModalBtn').addEventListener('click', () => closeModal(projectOverlay));
+  $('#projectDeadlineClear').addEventListener('click', () => { projectDeadlineInput.value = ''; });
+  projectOverlay.addEventListener('click', (e) => { if (e.target === projectOverlay) closeModal(projectOverlay); });
+
+  projectSaveBtn.addEventListener('click', () => {
+    const name = projectNameInput.value.trim();
+    if (!name) return;
+    const description = projectDescInput.value.trim();
+    const deadline = DATE_RE.test(projectDeadlineInput.value) ? projectDeadlineInput.value : '';
+
+    if (editingProjectId) {
+      const p = projectById(editingProjectId);
+      if (!p) return;
+      p.name = name;
+      p.description = description;
+      p.icon = currentProjectIcon;
+      if (deadline) p.deadline = deadline; else delete p.deadline;
+      showToast('プロジェクトを更新しました');
+    } else {
+      const p = {
+        id: 'p' + Date.now() + Math.random().toString(16).slice(2),
+        name, description,
+        icon: currentProjectIcon,
+        status: 'active',
+        createdAt: Date.now(),
+      };
+      if (deadline) p.deadline = deadline;
+      projects.push(p);
+      showToast('プロジェクトを作成しました');
+    }
+    saveState();
+    closeModal(projectOverlay);
+    renderAll();
+  });
+
+  projectDeleteBtn.addEventListener('click', () => {
+    if (!editingProjectId) return;
+    if (confirm('このプロジェクトを削除しますか？\n\nプロジェクトを削除しても、関連するタスクは削除されません。')) {
+      closeModal(projectOverlay);
+      deleteProject(editingProjectId);
+    }
+  });
+
   function getFocusable(container) {
     return [...container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
       .filter(el => !el.disabled && el.offsetParent !== null);
@@ -1973,7 +2106,8 @@
   // the 30+ background controls (sidebar, other views) while a modal is open.
   document.addEventListener('keydown', (e) => {
     const openOverlay = overlay.classList.contains('open') ? overlay
-      : habitOverlay.classList.contains('open') ? habitOverlay : null;
+      : habitOverlay.classList.contains('open') ? habitOverlay
+      : projectOverlay.classList.contains('open') ? projectOverlay : null;
     if (!openOverlay) return;
 
     if (e.key === 'Escape') { closeModal(openOverlay); return; }
@@ -2138,7 +2272,7 @@
   }
 
   $('#exportBtn').addEventListener('click', () => {
-    const data = JSON.stringify({ tasks, habits, settings }, null, 2);
+    const data = JSON.stringify({ tasks, habits, projects, settings }, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2160,11 +2294,14 @@
         if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.habits)) throw new Error('invalid');
         const importedTasks = parsed.tasks.map(normalizeTask).filter(Boolean);
         const importedHabits = parsed.habits.map(normalizeHabit).filter(Boolean);
+        // Backups written before Projects existed simply have no `projects` key.
+        const importedProjects = (Array.isArray(parsed.projects) ? parsed.projects : []).map(normalizeProject).filter(Boolean);
 
         // Cancelling either dialog must never destroy data. Step 1: proceed at all?
         const proceed = confirm(
-          `${importedTasks.length}件のタスクと${importedHabits.length}件の習慣を読み込みます。\n\n` +
-          'OK: インポートを続ける\nキャンセル: 何もしない'
+          `${importedTasks.length}件のタスクと${importedHabits.length}件の習慣` +
+          (importedProjects.length ? `、${importedProjects.length}件のプロジェクト` : '') +
+          'を読み込みます。\n\nOK: インポートを続ける\nキャンセル: 何もしない'
         );
         if (!proceed) { importFile.value = ''; return; }
 
@@ -2173,14 +2310,32 @@
           '既存のタスク・習慣をすべて置き換えますか？\n\n' +
           'OK: 置き換える（現在のデータは削除されます）\nキャンセル: 統合する（両方を残します）'
         );
+        // dedupeIds may hand a colliding project a fresh id, which would strand the
+        // imported tasks still pointing at the old one — so the rewrites are tracked
+        // and replayed onto those tasks before anything is committed.
+        const remapProjectIds = (projectsBefore, projectsAfter, taskList) => {
+          const remap = new Map();
+          projectsBefore.forEach((p, i) => { if (projectsAfter[i].id !== p.id) remap.set(p.id, projectsAfter[i].id); });
+          if (remap.size) taskList.forEach(t => { if (t.projectId && remap.has(t.projectId)) t.projectId = remap.get(t.projectId); });
+        };
+
         if (replace) {
-          tasks = dedupeIds(importedTasks, new Set());
+          const nextProjects = dedupeIds(importedProjects, new Set());
+          remapProjectIds(importedProjects, nextProjects, importedTasks);
+          projects = nextProjects;
+          tasks = pruneDanglingProjectIds(dedupeIds(importedTasks, new Set()), projects);
           habits = dedupeIds(importedHabits, new Set());
           // Preferences (theme/character/notify) only make sense to adopt wholesale,
           // not "merged" with the current ones — so only apply them on replace.
           settings = normalizeSettings(parsed.settings);
         } else {
-          tasks = tasks.concat(dedupeIds(importedTasks, new Set(tasks.map(t => t.id))));
+          const addedProjects = dedupeIds(importedProjects, new Set(projects.map(p => p.id)));
+          remapProjectIds(importedProjects, addedProjects, importedTasks);
+          projects = projects.concat(addedProjects);
+          tasks = pruneDanglingProjectIds(
+            tasks.concat(dedupeIds(importedTasks, new Set(tasks.map(t => t.id)))),
+            projects
+          );
           habits = habits.concat(dedupeIds(importedHabits, new Set(habits.map(h => h.id))));
         }
         const ok = saveState();
@@ -2197,60 +2352,6 @@
     };
     reader.readAsText(file);
   });
-
-  /* ---------- Projects ---------- */
-
-  $('#projectNameInput').addEventListener('input', () => {
-    $('#saveProjectBtn').disabled = $('#projectNameInput').value.trim().length === 0;
-  });
-  $('#addProjectBtn').addEventListener('click', () => openProjectModal());
-  $('#cancelProjectModalBtn').addEventListener('click', closeProjectModal);
-  $('#saveProjectBtn').addEventListener('click', saveProject);
-  $('#deleteProjectBtn').addEventListener('click', deleteProjectConfirm);
-
-  $('#projectDetailBack').addEventListener('click', () => switchView('projects'));
-  $('#projectEditBtn').addEventListener('click', () => openProjectModal(currentProjectDetailId));
-  $('#projectCompleteBtn').addEventListener('click', () => {
-    if (currentProjectDetailId) {
-      completeProject(currentProjectDetailId);
-      renderAll();
-      switchView('projects');
-      showToast('プロジェクトを完了しました');
-    }
-  });
-  $('#projectDeleteBtn').addEventListener('click', () => {
-    const deleteBtn = $('#deleteProjectBtn');
-    deleteBtn.classList.remove('hidden');
-    deleteBtn.onclick = deleteProjectConfirm;
-  });
-
-  $('#addTaskToProjectBtn').addEventListener('click', () => {
-    openModal($('#modalOverlay'), $('#taskNameInput'));
-    editingId = null;
-    $('#taskNameInput').value = '';
-    $('#taskDateInput').value = '';
-    $('#taskTimeInput').value = '';
-    $('#taskCategorySelect').value = '';
-    $('#taskNoteInput').value = '';
-    $$('#priorityPicker button').forEach(b => b.classList.remove('active'));
-    $$('#priorityPicker button[data-priority="medium"]')[0].classList.add('active');
-    taskPriority = 'medium';
-    $('#deleteTaskBtn').classList.add('hidden');
-    $('#saveTaskBtn').innerHTML = '追加';
-  });
-
-  $$('#projectViewToggle button').forEach(b => b.addEventListener('click', () => {
-    $$('#projectViewToggle button').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    const view = b.dataset.projectView;
-    if (view === 'active') {
-      $('#projectsList').style.display = 'block';
-      $('#projectsHistoryList').style.display = 'none';
-    } else {
-      $('#projectsList').style.display = 'none';
-      $('#projectsHistoryList').style.display = 'block';
-    }
-  }));
 
   /* ---------- Date rollover ---------- */
 
@@ -2281,7 +2382,10 @@
   renderCharacter();
   renderCharacterSettings();
   renderIconPicker();
+  renderProjectIconPicker();
   renderWeekdayPicker();
+  populateProjectSelect(projectSelect);
+  syncFab();
   renderAll();
   if (dataLoadCorrupted) showToast('保存データの読み込みに失敗したため、新しい状態で開始しました。');
 })();

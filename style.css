@@ -1088,10 +1088,13 @@ button { cursor: pointer; }
 .detail-back svg { width: 15px; height: 15px; }
 
 .detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
-.detail-heading { display: flex; align-items: center; gap: 14px; }
+/* min-width:0 lets a long title shrink and wrap instead of widening the row and
+   pushing the action buttons off the right edge of a narrow screen. */
+.detail-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.detail-heading > div { min-width: 0; }
 .detail-heading .habit-icon { width: 48px; height: 48px; }
 .detail-heading .habit-icon svg { width: 22px; height: 22px; }
-.detail-title { font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: -0.01em; margin: 0; }
+.detail-title { font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: -0.01em; margin: 0; overflow-wrap: anywhere; text-wrap: pretty; }
 .detail-meta { display: flex; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
 .detail-actions { display: flex; gap: 2px; flex-shrink: 0; }
 
@@ -1147,6 +1150,171 @@ button { cursor: pointer; }
 .legend-swatch.done { background: var(--accent); border-color: var(--accent); }
 .legend-swatch.missed { background: var(--surface); border-style: dashed; }
 .legend-swatch.future { background: var(--surface-2); opacity: 0.6; }
+
+/* ---------- Projects ---------- */
+
+/* Same treatment as .habit-icon so the three feature areas read as one family. */
+.project-icon {
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-strong);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.project-icon svg { width: 18px; height: 18px; }
+.detail-heading .project-icon { width: 48px; height: 48px; }
+.detail-heading .project-icon svg { width: 22px; height: 22px; }
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+}
+.project-grid > .empty-state { grid-column: 1 / -1; }
+
+.project-card {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 17px 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  min-width: 0;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.project-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); border-color: var(--border-strong); }
+.project-card.is-complete { background: var(--surface-2); box-shadow: none; }
+.project-card.is-complete:hover { transform: none; box-shadow: none; }
+
+.project-card-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.project-card-title-wrap { min-width: 0; }
+.project-card-name {
+  font-weight: 600; font-size: 15px; color: var(--text);
+  overflow-wrap: anywhere; text-wrap: pretty;
+}
+.project-card-sub { font-size: 12px; color: var(--text-muted); font-weight: 600; margin-top: 3px; }
+
+.project-card-progress { display: flex; align-items: center; gap: 10px; }
+
+.project-bar {
+  flex: 1; min-width: 0; height: 7px; border-radius: 999px;
+  background: var(--surface-2); overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(43, 35, 24, 0.08);
+  display: block;
+}
+.project-bar.sm { height: 5px; }
+.project-bar.lg { height: 10px; }
+.project-bar-fill {
+  display: block; height: 100%; width: 0;
+  background: var(--accent); border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.project-pct {
+  font-size: 12.5px; font-weight: 800; color: var(--text-muted);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  flex-shrink: 0; min-width: 34px; text-align: right;
+}
+
+.project-card-foot {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding-top: 12px; border-top: 1px solid var(--border);
+}
+.project-foot-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+}
+.project-foot-chip svg { width: 12px; height: 12px; opacity: 0.8; }
+.project-foot-chip.done { color: var(--accent-strong); }
+.project-foot-chip.overdue { color: var(--priority-high); }
+
+/* Deliberately quiet: amber for "coming up", red only for genuinely past due. */
+.project-foot-note {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.02em;
+  padding: 2px 8px; border-radius: 999px;
+  color: color-mix(in srgb, var(--priority-medium) 80%, var(--text));
+  background: color-mix(in srgb, var(--priority-medium) 18%, var(--surface));
+}
+.project-foot-note.overdue {
+  color: color-mix(in srgb, var(--priority-high) 82%, var(--text));
+  background: color-mix(in srgb, var(--priority-high) 14%, var(--surface));
+}
+
+/* Project label on a task row — distinct from .cat-chip, which is colour-coded. */
+.project-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 700;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  padding: 3px 10px 3px 7px; border-radius: 999px;
+  max-width: 100%; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.project-chip svg { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.9; }
+.task-row.done .project-chip { opacity: 0.55; }
+
+.project-detail-desc {
+  margin: -8px 0 22px; font-size: 14px; color: var(--text-muted);
+  max-width: 60ch; text-wrap: pretty; overflow-wrap: anywhere;
+}
+.project-detail-progress {
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 26px;
+  box-shadow: var(--shadow-sm);
+}
+.project-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.project-progress-label {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.project-progress-count { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.project-progress-row { display: flex; align-items: center; gap: 14px; }
+.project-progress-pct {
+  font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1;
+  color: var(--accent-strong); flex-shrink: 0;
+}
+
+.project-tasks-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+.detail-meta .done-chip { color: var(--accent-strong); }
+/* A finished project is worth a nudge, never a forced state change. */
+.icon-btn.suggest { color: var(--accent-strong); background: var(--accent-soft); }
+.icon-btn.is-reopen { color: var(--text-faint); }
+
+.empty-state .empty-cta { margin-top: 18px; }
+
+/* Home — a compact read-only summary, capped at three entries. */
+/* Auto-placed after the named areas rather than owning one of its own: when there
+   are no projects the card is display:none and leaves no empty row or stray gap. */
+.home-card-projects { grid-column: 1 / -1; min-width: 0; }
+.home-project-list { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; }
+.home-project-item {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; padding: 9px 2px; background: none; border: none; text-align: left;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.home-project-item:last-child { border-bottom: none; }
+.home-project-icon {
+  width: 28px; height: 28px; border-radius: 9px; flex-shrink: 0;
+  background: var(--accent-soft); color: var(--accent-strong);
+  display: flex; align-items: center; justify-content: center;
+}
+.home-project-icon svg { width: 15px; height: 15px; }
+.home-project-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.home-project-name {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-project-side { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.home-project-pct {
+  font-size: 12px; font-weight: 800; color: var(--text-muted);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.home-project-due { font-size: 10.5px; font-weight: 700; color: var(--text-faint); }
+.home-project-due.soon { color: color-mix(in srgb, var(--priority-medium) 80%, var(--text)); }
+.home-project-due.overdue { color: var(--priority-high); }
 
 /* ---------- Mobile ---------- */
 
@@ -1218,14 +1386,18 @@ button { cursor: pointer; }
     display: flex;
     position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--surface); border-top: 1px solid var(--border);
-    padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+    padding: 8px 2px calc(8px + env(safe-area-inset-bottom));
     justify-content: space-around;
     z-index: 50;
   }
+  /* Six tabs share the width, so each one is allowed to shrink and clip its own
+     label rather than pushing the bar wider than the screen. */
   .mobile-tabbar button {
     display: flex; flex-direction: column; align-items: center; gap: 3px;
     background: none; border: none; color: var(--text-faint);
-    font-size: 10px; font-weight: 700; padding: 5px 8px; border-radius: 12px;
+    font-size: 10px; font-weight: 700; padding: 5px 3px; border-radius: 12px;
+    flex: 1 1 0; min-width: 0; overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis;
   }
   .mobile-tabbar button svg { width: 19px; height: 19px; }
   .mobile-tabbar button.active { color: var(--accent-strong); }
@@ -1256,6 +1428,18 @@ button { cursor: pointer; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .detail-title { font-size: 22px; }
   .calendar-day { font-size: 11.5px; min-width: 0; }
+
+  /* Projects: one card per row, then detail, then its task list — a single
+     vertical column with nothing able to push past the viewport width. */
+  .project-grid { grid-template-columns: 1fr; gap: 12px; }
+  .project-card { padding: 15px 16px; }
+  .project-detail-progress { padding: 14px 16px; }
+  .project-progress-pct { font-size: 24px; }
+  .project-tasks-head { margin-bottom: 12px; }
+  .project-detail-desc { margin: -4px 0 18px; font-size: 13.5px; }
+  /* The header's New project / Add task buttons are hidden here (as everywhere on
+     mobile); the FAB and the empty-state CTA carry those actions instead. */
+  .empty-state .empty-cta { min-height: 44px; }
 }
 
 /* Very narrow phones: optimize logo and hide non-essential UI elements
@@ -1267,6 +1451,9 @@ button { cursor: pointer; }
     min-width: 100px;
     max-width: 150px;
   }
+  /* Six labels have to coexist on a ~375px bar without wrapping or clipping. */
+  .mobile-tabbar button { font-size: 9px; padding: 5px 1px; letter-spacing: -0.01em; }
+  .mobile-tabbar button svg { width: 18px; height: 18px; }
 }
 
 /* Very narrow phones: the date pill would squeeze the wordmark below a
@@ -1284,6 +1471,7 @@ button { cursor: pointer; }
   .icon-btn svg { width: 18px; height: 18px; }
   .view { padding: 14px 12px 110px; }
   .view-title { font-size: 20px; }
+  .mobile-tabbar button { font-size: 8.5px; gap: 2px; }
 }
 
 /* Narrow + OS dark (no explicit theme chosen) */
@@ -1300,285 +1488,3 @@ button { cursor: pointer; }
 }
 
 .hidden { display: none !important; }
-
-/* ---------- Projects ---------- */
-
-.projects-view-content {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.projects-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.project-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.project-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.project-card-header {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.project-card-icon {
-  font-size: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.project-card-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.project-card-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-card-meta {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.project-card-progress {
-  margin-bottom: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  background: var(--surface-hover);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-
-.progress-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 500;
-  min-width: 35px;
-  text-align: right;
-}
-
-.project-card-footer {
-  font-size: 12px;
-  color: var(--text-faint);
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.project-card-deadline {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Project Detail */
-
-.project-progress-block {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  margin-bottom: 24px;
-}
-
-.project-progress-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.project-progress-pct {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--accent);
-  min-width: 60px;
-  text-align: center;
-}
-
-.project-progress-track {
-  flex: 1;
-  height: 10px;
-  background: var(--surface-hover);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.project-progress-label {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 8px;
-}
-
-.project-detail-content {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.project-detail-section {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 20px;
-}
-
-.project-detail-section h3 {
-  margin: 0 0 16px;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-/* Icon Picker */
-
-.icon-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-  gap: 8px;
-}
-
-.icon-option {
-  aspect-ratio: 1;
-  border: 2px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-hover);
-  cursor: pointer;
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.icon-option:hover {
-  border-color: var(--accent);
-  background: var(--surface);
-}
-
-.icon-option.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--text-muted);
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-}
-
-.empty-hint {
-  font-size: 13px;
-  color: var(--text-faint);
-  margin-top: 8px;
-}
-
-/* Home Projects Card */
-
-.home-card-projects {
-  grid-column: 1 / -1;
-}
-
-.home-project-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: var(--surface-hover);
-  border-radius: var(--radius-sm);
-  margin-bottom: 8px;
-  transition: background 0.2s ease;
-}
-
-.home-project-item:hover {
-  background: var(--border);
-}
-
-.home-project-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  font-size: 14px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-project-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.home-project-progress {
-  display: flex;
-  height: 4px;
-  background: var(--surface);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.home-project-progress .progress-fill {
-  background: var(--accent);
-  height: 100%;
-}
-
-.home-project-meta {
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-@media (max-width: 768px) {
-  .projects-list {
-    grid-template-columns: 1fr;
-  }
-
-  .project-progress-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .project-progress-pct {
-    text-align: left;
-  }
-}
