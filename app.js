@@ -1,7 +1,8 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'todoAppDataV2';
+  const STORAGE_KEY = 'todoAppDataV3';
+  const OLD_STORAGE_KEY_V2 = 'todoAppDataV2';
   const OLD_STORAGE_KEY = 'todoAppData';
 
   const CATEGORIES = [
@@ -9,6 +10,12 @@
     { key: 'personal', label: 'Personal', color: '#ef9b3d' },
     { key: 'study', label: 'Study', color: '#9b7ee0' },
     { key: 'health', label: 'Health', color: '#3fae87' },
+  ];
+
+  const PROJECT_ICONS = [
+    '📋', '🎯', '💼', '🏢', '🎨', '🎬', '📱', '💻',
+    '🎓', '📚', '✈️', '🏠', '🍽️', '🎪', '🌍', '🚀',
+    '🎮', '🎵', '📊', '🔧', '📸', '🌱', '⚡', '🎁',
   ];
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -55,7 +62,7 @@
   function normalizeTask(t) {
     if (!t || typeof t !== 'object') return null;
     if (typeof t.title !== 'string' || !t.title.trim()) return null;
-    return {
+    const normalized = {
       id: typeof t.id === 'string' && t.id ? t.id : ('t' + Date.now() + Math.random().toString(16).slice(2)),
       title: t.title,
       date: typeof t.date === 'string' && DATE_RE.test(t.date) ? t.date : '',
@@ -66,6 +73,8 @@
       completed: !!t.completed,
       completedAt: typeof t.completedAt === 'string' && DATE_RE.test(t.completedAt) ? t.completedAt : undefined,
     };
+    if (typeof t.projectId === 'string' && t.projectId) normalized.projectId = t.projectId;
+    return normalized;
   }
 
   /** Coerces one loaded/imported habit into a well-formed shape. Returns null for unusable entries. */
@@ -89,6 +98,24 @@
     };
     if (typeof h.endDate === 'string' && DATE_RE.test(h.endDate)) out.endDate = h.endDate;
     if (typeof h.plannedEndDate === 'string' && DATE_RE.test(h.plannedEndDate)) out.plannedEndDate = h.plannedEndDate;
+    return out;
+  }
+
+  /** Coerces one loaded/imported project into a well-formed shape. Returns null for unusable entries. */
+  function normalizeProject(p) {
+    if (!p || typeof p !== 'object') return null;
+    if (typeof p.name !== 'string' || !p.name.trim()) return null;
+    const out = {
+      id: typeof p.id === 'string' && p.id ? p.id : ('p' + Date.now() + Math.random().toString(16).slice(2)),
+      name: p.name,
+      description: typeof p.description === 'string' ? p.description : '',
+      icon: typeof p.icon === 'string' ? p.icon : null,
+      status: (p.status === 'completed') ? 'completed' : 'active',
+      taskIds: Array.isArray(p.taskIds) ? p.taskIds.filter(id => typeof id === 'string') : [],
+      createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
+    };
+    if (typeof p.deadline === 'string' && DATE_RE.test(p.deadline)) out.deadline = p.deadline;
+    if (typeof p.completedAt === 'string' && DATE_RE.test(p.completedAt)) out.completedAt = p.completedAt;
     return out;
   }
 
@@ -177,6 +204,19 @@
     }
   }
 
+  function migrateFromV2() {
+    const raw = localStorage.getItem(OLD_STORAGE_KEY_V2);
+    if (!raw) return null;
+    try {
+      const old = JSON.parse(raw);
+      const tasks = (Array.isArray(old.tasks) ? old.tasks : []).map(normalizeTask).filter(Boolean);
+      const habits = (Array.isArray(old.habits) ? old.habits : []).map(normalizeHabit).filter(Boolean);
+      return { tasks, habits, settings: normalizeSettings(old.settings || {}) };
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Set when saved data exists but fails to parse, so the user finds out their
   // data didn't silently vanish. Read (and shown) once the rest of the module —
   // including showToast's own `let toastTimer` — has finished initializing;
@@ -190,20 +230,28 @@
         const parsed = JSON.parse(raw);
         const tasks = dedupeIds((Array.isArray(parsed.tasks) ? parsed.tasks : []).map(normalizeTask).filter(Boolean), new Set());
         const habits = dedupeIds((Array.isArray(parsed.habits) ? parsed.habits : []).map(normalizeHabit).filter(Boolean), new Set());
+        const projects = dedupeIds((Array.isArray(parsed.projects) ? parsed.projects : []).map(normalizeProject).filter(Boolean), new Set());
         return {
           tasks,
           habits,
+          projects,
           settings: normalizeSettings(parsed.settings),
         };
       } catch (e) { dataLoadCorrupted = true; /* fall through to a fresh/migrated state */ }
     }
-    const migrated = migrateFromV1();
-    if (migrated) {
-      const state = { tasks: migrated.tasks, habits: migrated.habits, settings: {} };
+    const migratedV2 = migrateFromV2();
+    if (migratedV2) {
+      const state = { tasks: migratedV2.tasks, habits: migratedV2.habits, projects: [], settings: migratedV2.settings };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       return state;
     }
-    return { tasks: [], habits: [], settings: {} };
+    const migratedV1 = migrateFromV1();
+    if (migratedV1) {
+      const state = { tasks: migratedV1.tasks, habits: migratedV1.habits, projects: [], settings: {} };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      return state;
+    }
+    return { tasks: [], habits: [], projects: [], settings: {} };
   }
 
   /** Returns true on success. Callers that show their own "saved" toast should
@@ -211,7 +259,7 @@
    *  success toast would silently overwrite the warning. */
   function saveState() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, habits, settings }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, habits, projects, settings }));
       return true;
     } catch (e) {
       showToast('保存に失敗しました。ブラウザの空き容量をご確認ください。');
@@ -222,13 +270,16 @@
   const initial = loadState();
   let tasks = initial.tasks;
   let habits = initial.habits;
+  let projects = initial.projects;
   let settings = initial.settings;
 
   let currentView = 'today';
   let activeCategory = null;
   let editingId = null;
   let editingHabitId = null;
+  let editingProjectId = null;
   let currentHabitDetailId = null;
+  let currentProjectDetailId = null;
   let calendarCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
   let justCompletedTaskId = null;
   let justCompletedHabitId = null;
@@ -1244,31 +1295,361 @@
     sel.innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
   }
 
+  /* ---------- Projects ---------- */
+
+  function getProjectProgress(projectId) {
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return { total: 0, completed: 0, percentage: 0 };
+    const total = proj.taskIds.length;
+    if (total === 0) return { total: 0, completed: 0, percentage: 0 };
+    const completed = proj.taskIds.filter(tid => tasks.find(t => t.id === tid && t.completed)).length;
+    const percentage = Math.round((completed / total) * 100);
+    return { total, completed, percentage };
+  }
+
+  function createProject(name, description, deadline, icon) {
+    const id = 'p' + Date.now() + Math.random().toString(16).slice(2);
+    const proj = {
+      id,
+      name,
+      description: description || '',
+      icon: icon || null,
+      status: 'active',
+      taskIds: [],
+      deadline: deadline || undefined,
+      createdAt: Date.now(),
+    };
+    projects.push(proj);
+    saveState();
+    return id;
+  }
+
+  function updateProject(projectId, updates) {
+    const proj = projects.find(p => p.id === projectId);
+    if (proj) {
+      Object.assign(proj, updates);
+      saveState();
+    }
+  }
+
+  function deleteProject(projectId) {
+    projects = projects.filter(p => p.id !== projectId);
+    tasks = tasks.map(t => t.projectId === projectId ? { ...t, projectId: undefined } : t);
+    saveState();
+  }
+
+  function completeProject(projectId) {
+    const proj = projects.find(p => p.id === projectId);
+    if (proj) {
+      proj.status = 'completed';
+      proj.completedAt = todayStr();
+      saveState();
+    }
+  }
+
+  function addTaskToProject(projectId, taskId) {
+    const proj = projects.find(p => p.id === projectId);
+    const task = tasks.find(t => t.id === taskId);
+    if (proj && task) {
+      if (!proj.taskIds.includes(taskId)) {
+        proj.taskIds.push(taskId);
+      }
+      task.projectId = projectId;
+      saveState();
+    }
+  }
+
+  function removeTaskFromProject(projectId, taskId) {
+    const proj = projects.find(p => p.id === projectId);
+    if (proj) {
+      proj.taskIds = proj.taskIds.filter(id => id !== taskId);
+      const task = tasks.find(t => t.id === taskId);
+      if (task) task.projectId = undefined;
+      saveState();
+    }
+  }
+
+  function renderProjectCard(proj) {
+    const progress = getProjectProgress(proj.id);
+    const deadline = proj.deadline ? new Date(proj.deadline + 'T00:00:00') : null;
+    const deadlineText = deadline ? `${deadline.getMonth() + 1}/${deadline.getDate()}` : '期限なし';
+    const icon = proj.icon || '📋';
+
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    card.innerHTML = `
+      <div class="project-card-header">
+        <div class="project-card-icon">${icon}</div>
+        <div class="project-card-info">
+          <h3 class="project-card-title">${escapeHtml(proj.name)}</h3>
+          <div class="project-card-meta">${progress.completed} / ${progress.total} tasks</div>
+        </div>
+      </div>
+      <div class="project-card-progress">
+        <div class="progress-bar"><div class="progress-fill" style="width:${progress.percentage}%"></div></div>
+        <div class="progress-label">${progress.percentage}%</div>
+      </div>
+      <div class="project-card-footer">
+        <span class="project-card-deadline">${escapeHtml(deadlineText)}</span>
+      </div>
+    `;
+    card.addEventListener('click', () => showProjectDetail(proj.id));
+    return card;
+  }
+
+  function renderProjects() {
+    const list = $('#projectsList');
+    const historyList = $('#projectsHistoryList');
+    if (!list) return;
+
+    const activeProjects = projects.filter(p => p.status !== 'completed');
+    const historyProjects = projects.filter(p => p.status === 'completed');
+
+    list.innerHTML = '';
+    historyList.innerHTML = '';
+
+    if (activeProjects.length === 0) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <p>まだプロジェクトがありません</p>
+          <p class="empty-hint">大きな目標をプロジェクトとしてまとめてみましょう。</p>
+        </div>
+      `;
+    } else {
+      activeProjects.forEach(proj => {
+        list.appendChild(renderProjectCard(proj));
+      });
+    }
+
+    if (historyProjects.length > 0) {
+      historyProjects.forEach(proj => {
+        historyList.appendChild(renderProjectCard(proj));
+      });
+    } else {
+      historyList.innerHTML = '<div class="empty-state"><p>完了したプロジェクトはありません</p></div>';
+    }
+
+    updateProjectCount();
+  }
+
+  function updateProjectCount() {
+    const activeCount = projects.filter(p => p.status !== 'completed').length;
+    const countEl = $('[data-count="projects"]');
+    if (countEl) {
+      countEl.innerHTML = activeCount > 0 ? `<span>${activeCount}</span>` : '';
+    }
+  }
+
+  function showProjectDetail(projectId) {
+    currentProjectDetailId = projectId;
+    switchView('project-detail');
+    renderProjectDetail();
+  }
+
+  function renderProjectDetail() {
+    const proj = projects.find(p => p.id === currentProjectDetailId);
+    if (!proj) {
+      switchView('projects');
+      return;
+    }
+
+    const progress = getProjectProgress(proj.id);
+    const icon = proj.icon || '📋';
+
+    $('#projectDetailIcon').innerHTML = icon;
+    $('#projectDetailTitle').innerHTML = escapeHtml(proj.name);
+
+    const metaHtml = `
+      <div class="detail-meta-row">
+        <div class="detail-meta-item">
+          <span class="detail-meta-label">Status</span>
+          <span class="detail-meta-value">${proj.status === 'completed' ? '完了' : '進行中'}</span>
+        </div>
+        ${proj.deadline ? `<div class="detail-meta-item">
+          <span class="detail-meta-label">Deadline</span>
+          <span class="detail-meta-value">${new Date(proj.deadline + 'T00:00:00').toLocaleDateString('ja-JP')}</span>
+        </div>` : ''}
+      </div>
+      ${proj.description ? `<div class="detail-meta-description">${escapeHtml(proj.description)}</div>` : ''}
+    `;
+    $('#projectDetailMeta').innerHTML = metaHtml;
+
+    $('#projectProgressPct').innerHTML = `${progress.percentage}%`;
+    $('#projectProgressFill').style.width = `${progress.percentage}%`;
+    $('#projectProgressLabel').innerHTML = `${progress.completed} / ${progress.total} tasks completed`;
+
+    const tasksList = $('#projectTasksList');
+    tasksList.innerHTML = '';
+    const projectTasks = tasks.filter(t => t.projectId === proj.id);
+    projectTasks.forEach(task => {
+      tasksList.appendChild(createTaskRow(task));
+    });
+
+    if (projectTasks.length === 0) {
+      tasksList.innerHTML = '<div class="empty-state"><p>タスクを追加してください</p></div>';
+    }
+
+    $('#projectCompleteBtn').style.display = proj.status === 'completed' ? 'none' : 'block';
+  }
+
+  function renderProjectIconPicker() {
+    const container = $('#projectIconPicker');
+    if (!container) return;
+    container.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'icon-grid';
+    PROJECT_ICONS.forEach(icon => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'icon-option';
+      btn.innerHTML = icon;
+      btn.addEventListener('click', () => {
+        grid.querySelectorAll('.icon-option').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+      grid.appendChild(btn);
+    });
+    container.appendChild(grid);
+  }
+
+  function openProjectModal(projectId = null) {
+    const overlay = $('#projectModalOverlay');
+    if (projectId) {
+      editingProjectId = projectId;
+      const proj = projects.find(p => p.id === projectId);
+      if (!proj) return;
+      $('#projectNameInput').value = proj.name;
+      $('#projectDescInput').value = proj.description;
+      $('#projectDeadlineInput').value = proj.deadline || '';
+      $('#saveProjectBtn').innerHTML = '保存';
+    } else {
+      editingProjectId = null;
+      $('#projectNameInput').value = '';
+      $('#projectDescInput').value = '';
+      $('#projectDeadlineInput').value = '';
+      $('#saveProjectBtn').innerHTML = '作成';
+    }
+    renderProjectIconPicker();
+    openModal(overlay, $('#projectNameInput'));
+  }
+
+  function closeProjectModal() {
+    closeModal($('#projectModalOverlay'));
+  }
+
+  function saveProject() {
+    const name = $('#projectNameInput').value.trim();
+    if (!name) {
+      showToast('プロジェクト名を入力してください');
+      return;
+    }
+    const description = $('#projectDescInput').value.trim();
+    const deadline = $('#projectDeadlineInput').value || undefined;
+    const iconEl = $('#projectIconPicker').querySelector('.icon-option.active');
+    const icon = iconEl ? iconEl.innerHTML : null;
+
+    if (editingProjectId) {
+      updateProject(editingProjectId, { name, description, deadline, icon });
+      showToast('プロジェクトを更新しました');
+    } else {
+      createProject(name, description, deadline, icon);
+      showToast('プロジェクトを作成しました');
+    }
+    renderAll();
+    closeProjectModal();
+  }
+
+  function deleteProjectConfirm() {
+    if (!editingProjectId) return;
+    if (confirm('このプロジェクトを削除しますか？\nプロジェクトを削除しても、関連するタスクは削除されません。')) {
+      deleteProject(editingProjectId);
+      renderAll();
+      closeProjectModal();
+      showToast('プロジェクトを削除しました');
+    }
+  }
+
+  function populateProjectSelect(sel) {
+    if (!sel) return;
+    sel.innerHTML = '<option value="">プロジェクトなし</option>';
+    projects.filter(p => p.status !== 'completed').forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  function renderHomeProjects() {
+    const activeProjects = projects.filter(p => p.status !== 'completed').slice(0, 3);
+    const container = $('#homeProjectsList');
+    const block = $('#homeProjectsBlock');
+    if (!container || !block) return;
+
+    if (activeProjects.length === 0) {
+      block.style.display = 'none';
+      return;
+    }
+
+    block.style.display = 'block';
+    container.innerHTML = '';
+    activeProjects.forEach(proj => {
+      const progress = getProjectProgress(proj.id);
+      const card = document.createElement('div');
+      card.className = 'home-project-item';
+      const icon = proj.icon || '📋';
+      card.innerHTML = `
+        <div class="home-project-name">
+          <span class="home-project-icon">${icon}</span>
+          <span>${escapeHtml(proj.name)}</span>
+        </div>
+        <div class="home-project-progress">
+          <div class="progress-bar"><div class="progress-fill" style="width:${progress.percentage}%"></div></div>
+        </div>
+        <div class="home-project-meta">${progress.percentage}% completed</div>
+      `;
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', () => showProjectDetail(proj.id));
+      container.appendChild(card);
+    });
+  }
+
   function renderAll() {
     renderToday();
     renderTodayHabits();
     renderHomeHabitsSummary();
     renderStreakCard();
     renderHomeUpcoming();
+    renderHomeProjects();
     renderInbox();
     renderUpcoming();
     renderCompleted();
+    renderProjects();
     renderHabits();
     renderCounts();
     renderCategorySidebar();
     renderCategoryManage();
+    populateProjectSelect($('#taskProjectSelect'));
   }
 
   /* ---------- Mutations ---------- */
 
   /** Single creation path for tasks — used by both the full modal and Quick Add. */
-  function createTask({ title, date = '', time = '', category = '', priority = 'medium', note = '' }) {
+  function createTask({ title, date = '', time = '', category = '', priority = 'medium', note = '', projectId = undefined }) {
     const task = {
       id: 't' + Date.now() + Math.random().toString(16).slice(2),
       title, date, time, category, note, priority,
       completed: false,
     };
+    if (projectId) task.projectId = projectId;
     tasks.push(task);
+    if (projectId) {
+      const proj = projects.find(p => p.id === projectId);
+      if (proj && !proj.taskIds.includes(task.id)) {
+        proj.taskIds.push(task.id);
+      }
+    }
     return task;
   }
 
@@ -1361,6 +1742,9 @@
     saveBtn.textContent = '追加';
     saveBtn.disabled = true;
     deleteBtn.classList.add('hidden');
+    const projectSelect = $('#taskProjectSelect');
+    if (projectSelect && currentProjectDetailId) projectSelect.value = currentProjectDetailId;
+    else if (projectSelect) projectSelect.value = '';
     openModal(overlay, nameInput);
   }
   function openEditModal(id) {
@@ -1370,6 +1754,9 @@
     nameInput.value = t.title;
     dateInput.value = t.date || '';
     timeInput.value = t.time || '';
+    const projectSelect = $('#taskProjectSelect');
+    if (projectSelect && t.projectId) projectSelect.value = t.projectId;
+    else if (projectSelect) projectSelect.value = '';
     catSelect.value = t.category || CATEGORIES[0].key;
     noteInput.value = t.note || '';
     setPriority(t.priority);
@@ -1393,13 +1780,16 @@
   saveBtn.addEventListener('click', () => {
     const title = nameInput.value.trim();
     if (!title) return;
+    const projectSelect = $('#taskProjectSelect');
+    const projectId = projectSelect && projectSelect.value ? projectSelect.value : undefined;
     if (editingId) {
       const t = tasks.find(t => t.id === editingId);
       t.title = title; t.date = dateInput.value; t.time = timeInput.value;
       t.category = catSelect.value; t.note = noteInput.value; t.priority = currentPriority;
+      if (projectId) t.projectId = projectId; else delete t.projectId;
       showToast('タスクを更新しました');
     } else {
-      createTask({ title, date: dateInput.value, time: timeInput.value, category: catSelect.value, note: noteInput.value, priority: currentPriority });
+      createTask({ title, date: dateInput.value, time: timeInput.value, category: catSelect.value, note: noteInput.value, priority: currentPriority, projectId });
       showToast('タスクを追加しました');
     }
     saveState();
@@ -1805,6 +2195,57 @@
     };
     reader.readAsText(file);
   });
+
+  /* ---------- Projects ---------- */
+
+  $('#addProjectBtn').addEventListener('click', () => openProjectModal());
+  $('#cancelProjectModalBtn').addEventListener('click', closeProjectModal);
+  $('#saveProjectBtn').addEventListener('click', saveProject);
+  $('#deleteProjectBtn').addEventListener('click', deleteProjectConfirm);
+
+  $('#projectDetailBack').addEventListener('click', () => switchView('projects'));
+  $('#projectEditBtn').addEventListener('click', () => openProjectModal(currentProjectDetailId));
+  $('#projectCompleteBtn').addEventListener('click', () => {
+    if (currentProjectDetailId) {
+      completeProject(currentProjectDetailId);
+      renderAll();
+      switchView('projects');
+      showToast('プロジェクトを完了しました');
+    }
+  });
+  $('#projectDeleteBtn').addEventListener('click', () => {
+    const deleteBtn = $('#deleteProjectBtn');
+    deleteBtn.classList.remove('hidden');
+    deleteBtn.onclick = deleteProjectConfirm;
+  });
+
+  $('#addTaskToProjectBtn').addEventListener('click', () => {
+    openModal($('#modalOverlay'), $('#taskNameInput'));
+    editingId = null;
+    $('#taskNameInput').value = '';
+    $('#taskDateInput').value = '';
+    $('#taskTimeInput').value = '';
+    $('#taskCategorySelect').value = '';
+    $('#taskNoteInput').value = '';
+    $$('#priorityPicker button').forEach(b => b.classList.remove('active'));
+    $$('#priorityPicker button[data-priority="medium"]')[0].classList.add('active');
+    taskPriority = 'medium';
+    $('#deleteTaskBtn').classList.add('hidden');
+    $('#saveTaskBtn').innerHTML = '追加';
+  });
+
+  $$('#projectViewToggle button').forEach(b => b.addEventListener('click', () => {
+    $$('#projectViewToggle button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    const view = b.dataset.projectView;
+    if (view === 'active') {
+      $('#projectsList').style.display = 'block';
+      $('#projectsHistoryList').style.display = 'none';
+    } else {
+      $('#projectsList').style.display = 'none';
+      $('#projectsHistoryList').style.display = 'block';
+    }
+  }));
 
   /* ---------- Date rollover ---------- */
 
