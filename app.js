@@ -1860,7 +1860,11 @@
   function openAddModal() {
     editingId = null;
     nameInput.value = '';
-    dateInput.value = ['today', 'upcoming'].includes(currentView) ? todayStr() : '';
+    // Today is the answer often enough to be worth pre-filling, and it matches
+    // Quick Add on Home. Inbox is the one exception: it exists to hold tasks with
+    // no date yet, so filling one in would push the new task straight out of the
+    // list the user is looking at.
+    dateInput.value = currentView === 'inbox' ? '' : todayStr();
     timeInput.value = '';
     catSelect.value = activeCategory || CATEGORIES[0].key;
     // Adding from inside a project means adding *to* that project — the field is
