@@ -5,14 +5,10 @@
 <title>Bienestar Flow</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="style.css">
-<!-- Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-4XFH93NXLL"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-4XFH93NXLL');
-</script>
+<!-- Analytics は入れていません。外部への送信が一切ないため、外部送信規律（電気通信事業法）
+     や GDPR に基づく同意取得・プライバシーポリシーの掲示が不要な構成を保っています。
+     再導入する場合は、事前の告知と同意取得の仕組みもあわせて用意してください。
+     タスク・習慣・プロジェクトのデータは端末内の localStorage にのみ保存されます。 -->
 </head>
 <body>
 
@@ -398,19 +394,9 @@
           <div id="categoryManageList" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:2px 12px;"></div>
         </div>
 
-        <div class="settings-block">
-          <h3>通知</h3>
-          <div class="settings-row">
-            <div>
-              <div class="settings-row-label">期限のリマインダー</div>
-              <div class="settings-row-desc">タスクの期限が近づいたらブラウザ通知でお知らせします</div>
-            </div>
-            <div class="segmented" id="notifySegmented">
-              <button data-notify-choice="off">オフ</button>
-              <button data-notify-choice="on" class="active">オン</button>
-            </div>
-          </div>
-        </div>
+        <!-- 通知（期限のリマインダー）は未実装のため設定から外しています。
+             実装する際はここに戻し、app.js の notifyEnabled まわりを復活させてください。
+             保存済みの notifyEnabled は読み書きを続けているので、設定値は失われません。 -->
 
         <div class="settings-block">
           <h3>データ</h3>

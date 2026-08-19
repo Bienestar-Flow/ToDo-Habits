@@ -704,7 +704,7 @@
     actions.className = 'task-actions';
     actions.innerHTML = `<button class="icon-btn" data-act="edit" title="編集">${iconEdit}</button><button class="icon-btn danger" data-act="delete" title="削除">${iconTrash}</button>`;
     actions.querySelector('[data-act="edit"]').addEventListener('click', (e) => { e.stopPropagation(); openEditModal(t.id); });
-    actions.querySelector('[data-act="delete"]').addEventListener('click', (e) => { e.stopPropagation(); deleteTask(t.id); });
+    actions.querySelector('[data-act="delete"]').addEventListener('click', (e) => { e.stopPropagation(); confirmDeleteTask(t.id); });
 
     row.appendChild(check);
     row.appendChild(mainEl);
@@ -931,10 +931,23 @@
     if (freq.type === 'custom') return (freq.days || []).includes(dow);
     return false;
   }
+  /** A habit is only "on" for days inside its own lifetime. Without the endDate
+   *  bound a finished habit keeps accruing scheduled days forever: its completion
+   *  rate erodes a little every day, the days after it ended read as missed, and
+   *  they stay clickable in the calendar long after the record should be final. */
   function isHabitScheduled(habit, dateStr) {
     if (dateStr < habit.startDate) return false;
+    if (habit.endDate && dateStr > habit.endDate) return false;
     const dow = new Date(dateStr + 'T00:00:00').getDay();
     return isScheduledDay(habit.frequency, dow);
+  }
+
+  /** The last day this habit was live — its end date once finished, otherwise
+   *  today. Bounds the history scans below so a habit ended years ago isn't
+   *  walked day by day up to the present on every render. */
+  function lastActiveDay(habit) {
+    const today = todayStr();
+    return habit.endDate && habit.endDate < today ? habit.endDate : today;
   }
   function isHabitDone(habit, dateStr) { return habit.completions.includes(dateStr); }
 
@@ -945,8 +958,10 @@
   function calcCurrentStreak(habit) {
     const done = new Set(habit.completions);
     let streak = 0;
-    let cursor = todayStr();
-    let isToday = true;
+    let cursor = lastActiveDay(habit);
+    // Today gets grace — there is still time to tick it off. A finished habit's
+    // final day gets none: its record is already closed.
+    let isToday = cursor === todayStr();
     let guard = 0;
     while (cursor >= habit.startDate && guard < 20000) {
       if (isHabitScheduled(habit, cursor)) {
@@ -963,7 +978,7 @@
     const done = new Set(habit.completions);
     let longest = 0, running = 0;
     let cursor = habit.startDate;
-    const end = todayStr();
+    const end = lastActiveDay(habit);
     let guard = 0;
     while (cursor <= end && guard < 20000) {
       if (isHabitScheduled(habit, cursor)) {
@@ -979,7 +994,7 @@
     const done = new Set(habit.completions);
     let scheduled = 0, doneCount = 0;
     let cursor = habit.startDate;
-    const end = todayStr();
+    const end = lastActiveDay(habit);
     let guard = 0;
     while (cursor <= end && guard < 20000) {
       if (isHabitScheduled(habit, cursor)) { scheduled++; if (done.has(cursor)) doneCount++; }
@@ -1587,8 +1602,11 @@
     $('[data-count="today"]').textContent = tasks.filter(t => t.date && t.date <= today && !t.completed).length || '';
     $('[data-count="upcoming"]').textContent = tasks.filter(t => t.date && t.date > today && !t.completed).length || '';
     $('[data-count="completed"]').textContent = tasks.filter(t => t.completed).length || '';
-    const remainingHabits = habits.filter(h => isHabitScheduled(h, today) && !isHabitDone(h, today)).length;
-    $('[data-count="habits"]').textContent = remainingHabits || '';
+    // Reuses the Habits page's own figures rather than re-deriving them: this was
+    // the one place that forgot to exclude archived habits, so the badge claimed
+    // work that the list itself showed as done and gone.
+    const habitStats = getHabitsTodayStats();
+    $('[data-count="habits"]').textContent = (habitStats.total - habitStats.done) || '';
     $('[data-count="projects"]').textContent = activeProjects().length || '';
   }
 
@@ -1684,6 +1702,17 @@
     const ok = saveState();
     renderAll();
     if (ok) showToast('タスクを削除しました');
+  }
+
+  /** The entry point every delete control uses. The trash icon sits right next to
+   *  edit and is easy to catch by accident on a phone, and a deleted task has no
+   *  undo — habits and projects already confirm, tasks were the one destructive
+   *  action that did not. */
+  function confirmDeleteTask(id) {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    const label = t.title.length > 40 ? t.title.slice(0, 40) + '…' : t.title;
+    if (confirm(`「${label}」を削除しますか？\n\nこの操作は取り消せません。`)) deleteTask(id);
   }
 
   let toastTimer = null;
@@ -1826,7 +1855,14 @@
     closeModal(overlay);
     renderAll();
   });
-  deleteBtn.addEventListener('click', () => { if (editingId) deleteTask(editingId); closeModal(overlay); });
+  // Closes only once the delete is confirmed, so cancelling leaves the task open
+  // for editing instead of dropping the user back with nothing changed and no clue.
+  deleteBtn.addEventListener('click', () => {
+    if (!editingId) return;
+    const id = editingId;
+    confirmDeleteTask(id);
+    if (!tasks.some(t => t.id === id)) closeModal(overlay);
+  });
 
   /* ---------- Habit modal ---------- */
 
@@ -2247,18 +2283,11 @@
     else document.documentElement.setAttribute('data-theme', choice);
     saveState();
   }));
-  $$('#notifySegmented button').forEach(b => b.addEventListener('click', () => {
-    $$('#notifySegmented button').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    settings.notifyEnabled = b.dataset.notifyChoice === 'on';
-    saveState();
-  }));
-
-  function applyStoredNotifySetting() {
-    if (typeof settings.notifyEnabled !== 'boolean') return; // no saved choice yet — keep the default markup
-    const choice = settings.notifyEnabled ? 'on' : 'off';
-    $$('#notifySegmented button').forEach(b => b.classList.toggle('active', b.dataset.notifyChoice === choice));
-  }
+  // Deadline reminders were offered in Settings but never actually implemented —
+  // no Notification API call existed anywhere — so the control is gone rather than
+  // promising something the app does not do. `notifyEnabled` is still read and
+  // written by normalizeSettings/saveState, so anyone who already picked a value
+  // keeps it for whenever the feature ships.
 
   function applyStoredTheme() {
     const theme = settings.theme;
@@ -2341,7 +2370,6 @@
         const ok = saveState();
         renderAll();
         applyStoredTheme();
-        applyStoredNotifySetting();
         renderCharacter();
         renderCharacterSettings();
         if (ok) showToast('インポートしました');
@@ -2378,7 +2406,6 @@
   populateCategorySelect(quickCategory);
   resetQuickAdd();
   applyStoredTheme();
-  applyStoredNotifySetting();
   renderCharacter();
   renderCharacterSettings();
   renderIconPicker();
