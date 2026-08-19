@@ -84,6 +84,14 @@
     </aside>
 
     <main class="main">
+      <!-- カテゴリー絞り込みはサイドバーにしかなく、サイドバーはスマホでは非表示のため、
+           絞り込みがPC専用機能になっていました。ここはスマホ幅でのみ現れる代替の導線です。
+           対象は絞り込みが効く4画面（Home / Inbox / Upcoming / Completed）だけで、
+           それ以外の画面では switchView が .hidden を付けて隠します。 -->
+      <div class="category-bar hidden" id="categoryBar">
+        <div class="category-bar-scroll" id="categoryBarList"></div>
+      </div>
+
       <section class="view wide active" id="view-today">
         <div class="view-header hero-header">
           <button class="add-task-btn" data-add><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add task</button>

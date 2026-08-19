@@ -1151,6 +1151,42 @@ button { cursor: pointer; }
 .legend-swatch.missed { background: var(--surface); border-style: dashed; }
 .legend-swatch.future { background: var(--surface-2); opacity: 0.6; }
 
+/* ---------- Category bar (narrow screens only) ----------
+   Stands in for the sidebar's category list, which is hidden below 860px. Sticks
+   to the top of the scrolling area so the filter stays reachable in a long list. */
+
+.category-bar { display: none; }
+
+.category-bar-scroll {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.category-bar-scroll::-webkit-scrollbar { display: none; }
+
+.category-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12.5px; font-weight: 700;
+  white-space: nowrap;
+  min-height: 36px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.category-chip .cat-dot { width: 8px; height: 8px; }
+.category-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.category-chip.active .cat-dot { background: var(--accent-contrast); opacity: 0.85; }
+
 /* ---------- Projects ---------- */
 
 /* Same treatment as .habit-icon so the three feature areas read as one family. */
@@ -1337,6 +1373,13 @@ button { cursor: pointer; }
   /* Trim the date pill a little so the wordmark keeps a readable size. */
   .today-pill { font-size: 11.5px; padding: 5px 9px; gap: 4px; }
 
+  .category-bar {
+    display: block;
+    position: sticky; top: 0; z-index: 20;
+    padding: 10px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
   .view { padding: 22px 16px 110px; }
   .view-title { font-size: 24px; }
   .view-subtitle { font-size: 13px; }

@@ -1095,7 +1095,6 @@
   }
 
   function renderHabits() {
-    if (autoCompleteExpiredHabits()) saveState();
     const list = $('#list-habits');
     list.innerHTML = '';
     const activeHabits = habits.filter(h => h.status !== 'archived');
@@ -1287,10 +1286,9 @@
           const idx = h.completions.indexOf(dateStr);
           if (idx >= 0) h.completions.splice(idx, 1); else h.completions.push(dateStr);
           saveState();
-          renderHabitDetail();
-          renderHabits();
-          renderTodayHabits();
-          renderCounts();
+          // renderAll redraws this detail view and marks the rest stale, so the
+          // Habits list and Home pick the change up when they are next shown.
+          renderAll();
         });
       }
       grid.appendChild(el);
@@ -1631,6 +1629,32 @@
     });
   }
 
+  /** Which views the category filter actually applies to. switchView already
+   *  clears activeCategory outside this set, so the bar follows the same list. */
+  const FILTERABLE_VIEWS = ['today', 'inbox', 'upcoming', 'completed'];
+
+  /** The narrow-screen counterpart to the sidebar list. Both write the same
+   *  `activeCategory`, so a filter chosen on one is reflected by the other the
+   *  moment the window is wide enough to show both. */
+  function renderCategoryBar() {
+    const bar = $('#categoryBar');
+    bar.classList.toggle('hidden', !FILTERABLE_VIEWS.includes(currentView));
+
+    const wrap = $('#categoryBarList');
+    wrap.innerHTML = '';
+    const add = (key, label, color) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'category-chip' + (activeCategory === key ? ' active' : '');
+      btn.setAttribute('aria-pressed', String(activeCategory === key));
+      btn.innerHTML = `<span class="cat-dot" style="--dot:${color}"></span>${escapeHtml(label)}`;
+      btn.addEventListener('click', () => { activeCategory = key; renderAll(); });
+      wrap.appendChild(btn);
+    };
+    add(null, 'すべて', 'var(--text-faint)');
+    CATEGORIES.forEach(c => add(c.key, c.label, c.color));
+  }
+
   function renderCategoryManage() {
     const wrap = $('#categoryManageList');
     wrap.innerHTML = '';
@@ -1658,24 +1682,63 @@
       listed.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
   }
 
+  /* ---------- Rendering ----------
+     Every view is still rebuilt wholesale from state — that is what keeps the
+     screens impossible to desync — but only the one on screen is rebuilt now.
+     Ticking a single task used to reconstruct all seven views plus both detail
+     screens, streak scans and all: 77-134ms on a desktop with a year of data,
+     several times that on a phone. The rest are marked stale and rebuilt the
+     moment they are shown, which is indistinguishable to the user. */
+
+  const VIEW_RENDERERS = {
+    today: () => {
+      renderToday();
+      renderTodayHabits();
+      renderHomeHabitsSummary();
+      renderStreakCard();
+      renderHomeUpcoming();
+      renderHomeProjects();
+    },
+    inbox: renderInbox,
+    upcoming: renderUpcoming,
+    completed: renderCompleted,
+    projects: renderProjects,
+    'project-detail': renderProjectDetail,
+    habits: renderHabits,
+    'habit-detail': renderHabitDetail,
+    settings: renderCategoryManage,
+  };
+
+  // Views whose DOM no longer matches the data. Emptied as each is shown.
+  const staleViews = new Set();
+
+  function renderView(view) {
+    staleViews.delete(view);
+    const render = VIEW_RENDERERS[view];
+    if (render) render();
+  }
+
   function renderAll() {
-    renderToday();
-    renderTodayHabits();
-    renderHomeHabitsSummary();
-    renderStreakCard();
-    renderHomeUpcoming();
-    renderHomeProjects();
-    renderInbox();
-    renderUpcoming();
-    renderCompleted();
-    renderProjects();
-    renderHabits();
+    // Archiving an expired habit changes counts everywhere, so it has to happen
+    // before anything is drawn — and outside a render function, which has no
+    // business writing to storage.
+    if (autoCompleteExpiredHabits()) saveState();
+
+    // Chrome that is visible regardless of which view is open.
     renderCounts();
     renderCategorySidebar();
-    renderCategoryManage();
-    // The open project detail is a view onto the same task data, so it refreshes
-    // with everything else — completing a task there updates its progress at once.
-    if (currentView === 'project-detail') renderProjectDetail();
+    renderCategoryBar();
+    // Skipped while the task modal is open: rebuilding the options would reset
+    // the project the user has picked but not yet saved.
+    if (!overlay.classList.contains('open')) populateProjectSelect(projectSelect);
+
+    Object.keys(VIEW_RENDERERS).forEach(v => staleViews.add(v));
+    renderView(currentView);
+
+    // A completion pop belongs to the view that was on screen when it happened;
+    // clearing here stops it firing later on some unrelated screen.
+    justCompletedTaskId = null;
+    justCompletedHabitId = null;
   }
 
   /* ---------- Mutations ---------- */
@@ -1753,8 +1816,18 @@
       if (isActive) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     $$('#mobileTabbar button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    if (!['today', 'inbox', 'upcoming', 'completed'].includes(view)) activeCategory = null;
+    // Leaving the filterable views drops the category filter. The task lists were
+    // rendered *with* that filter, so they have to be invalidated too — otherwise
+    // coming back shows a filtered list while the chips read "すべて".
+    if (!FILTERABLE_VIEWS.includes(view) && activeCategory !== null) {
+      activeCategory = null;
+      FILTERABLE_VIEWS.forEach(v => staleViews.add(v));
+    }
     if (view === 'settings') buildCharacterPicker();
+    // Views are rebuilt lazily, so a view that changed while it was hidden is
+    // brought up to date here, just before it becomes visible.
+    if (staleViews.has(view)) renderView(view);
+    renderCategoryBar();
     syncFab();
     $('.main').scrollTo({ top: 0 });
   }
