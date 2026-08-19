@@ -34,7 +34,7 @@
   }
   function relativeGroupLabel(dateStr) {
     const today = todayStr();
-    if (dateStr === addDays(today, 1)) return 'Tomorrow';
+    if (dateStr === addDays(today, 1)) return '明日';
     const d = new Date(dateStr + 'T00:00:00');
     return `${d.getMonth() + 1}/${d.getDate()}（${WD_JP[d.getDay()]}）`;
   }
@@ -573,12 +573,15 @@
    * Artwork lives in images/<key>.png. If a file is missing or fails to decode
    * we fall back to the built-in SVG so the layout never shows a broken image.
    */
-  function buildCharacterVisual(key) {
+  function buildCharacterVisual(key, { lazy = false } = {}) {
     const wrap = document.createElement('span');
     wrap.className = 'character-visual';
     const img = document.createElement('img');
     img.src = `images/${key}.png`;
     img.alt = '';
+    // Only for the settings picker, where most options sit below the fold. The
+    // Home character is the first thing on screen and must never be deferred.
+    if (lazy) img.loading = 'lazy';
     img.addEventListener('error', () => {
       wrap.innerHTML = CHARACTER_SVG[key] || CHARACTER_SVG[DEFAULT_CHARACTER];
     }, { once: true });
@@ -639,7 +642,7 @@
     // amber for approaching, and red reserved for genuinely overdue.
     if (p.status === 'completed') return { label, tone: '' };
     if (daysLeft < 0) return { label, tone: 'overdue', note: '期限切れ' };
-    if (daysLeft <= 3) return { label, tone: 'soon', note: 'Due soon' };
+    if (daysLeft <= 3) return { label, tone: 'soon', note: 'まもなく期限' };
     return { label, tone: '' };
   }
 
@@ -816,7 +819,7 @@
   function renderHomeHabitsSummary() {
     const stats = getHabitsTodayStats();
     $('#homeHabitProgressText').textContent = stats.total
-      ? `${stats.done} / ${stats.total} habits completed`
+      ? `${stats.done} / ${stats.total} 件を達成`
       : '';
   }
 
@@ -1063,7 +1066,7 @@
     meta.className = 'habit-meta';
     const c = catInfo(h.category);
     meta.innerHTML = `
-      <span class="streak-chip ${streak === 0 ? 'zero' : ''}">${iconFlame}<strong>${streak}</strong>&nbsp;day streak</span>
+      <span class="streak-chip ${streak === 0 ? 'zero' : ''}">${iconFlame}<strong>${streak}</strong>日連続</span>
       <span class="meta-chip">${frequencyLabel(h.frequency)}</span>
       ${c ? `<span class="cat-chip" style="--dot:${c.color}"><span class="cat-dot"></span>${c.label}</span>` : ''}
     `;
@@ -1077,7 +1080,7 @@
     if (scheduled) {
       const check = document.createElement('button');
       check.className = 'habit-check' + (done ? ' done' : '');
-      check.innerHTML = `<span class="dot-ring">${iconCheck}</span>${done ? 'Completed' : 'Not completed'}`;
+      check.innerHTML = `<span class="dot-ring">${iconCheck}</span>${done ? '達成' : '未達成'}`;
       check.setAttribute('aria-pressed', String(done));
       check.addEventListener('click', (e) => { e.stopPropagation(); toggleHabitToday(h.id); });
       if (currentView === 'habits' && h.id === justCompletedHabitId) { firePop(check.querySelector('.dot-ring')); justCompletedHabitId = null; }
@@ -1105,7 +1108,7 @@
     }
 
     const stats = getHabitsTodayStats();
-    $('#habitProgressText').textContent = `${stats.done} / ${stats.total} habits completed`;
+    $('#habitProgressText').textContent = `${stats.done} / ${stats.total} 件を達成`;
     $('#habitProgressFill').style.width = stats.total ? `${Math.round(stats.done / stats.total * 100)}%` : '0%';
 
     renderHabitHistory();
@@ -1144,7 +1147,7 @@
       const endLabel = h.endDate ? new Date(h.endDate + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' }) : '−';
       meta.innerHTML = `
         <span class="meta-chip">${startLabel} → ${endLabel}</span>
-        <span class="meta-chip">${stats.done} / ${stats.scheduled} days</span>
+        <span class="meta-chip">${stats.done} / ${stats.scheduled} 日を達成</span>
         <span class="meta-chip">${stats.rate}%</span>
       `;
       main.appendChild(nameEl);
@@ -1180,7 +1183,7 @@
           <div class="habit-icon" style="width:30px;height:30px;flex-shrink:0;">${habitIconSvg(h)}</div>
           <div class="habit-main-text">
             <div class="habit-name"></div>
-            <div class="habit-meta"><span class="streak-chip ${streak === 0 ? 'zero' : ''}">${iconFlame}<strong>${streak}</strong>&nbsp;day streak</span></div>
+            <div class="habit-meta"><span class="streak-chip ${streak === 0 ? 'zero' : ''}">${iconFlame}<strong>${streak}</strong>日連続</span></div>
           </div>
         </div>
       `;
@@ -1188,7 +1191,7 @@
       row.querySelector('.habit-name').title = h.name;
       const check = document.createElement('button');
       check.className = 'habit-check compact' + (done ? ' done' : '');
-      check.innerHTML = `<span class="dot-ring">${iconCheck}</span>${done ? 'Completed' : 'Complete'}`;
+      check.innerHTML = `<span class="dot-ring">${iconCheck}</span>${done ? '達成' : '未達成'}`;
       check.setAttribute('aria-pressed', String(done));
       check.addEventListener('click', (e) => { e.stopPropagation(); toggleHabitToday(h.id); });
       if (currentView === 'today' && h.id === justCompletedHabitId) { firePop(check.querySelector('.dot-ring')); justCompletedHabitId = null; }
@@ -1370,7 +1373,7 @@
     nameEl.textContent = p.name;
     const subEl = document.createElement('div');
     subEl.className = 'project-card-sub';
-    subEl.textContent = stats.total === 0 ? 'No tasks yet' : `${stats.done} / ${stats.total} tasks completed`;
+    subEl.textContent = stats.total === 0 ? 'タスクはまだありません' : `${stats.done} / ${stats.total} 件が完了`;
     titleWrap.appendChild(nameEl);
     titleWrap.appendChild(subEl);
     head.appendChild(icon);
@@ -1501,7 +1504,7 @@
 
     $('#projectDetailPct').textContent = `${stats.pct}%`;
     $('#projectDetailFill').style.width = `${stats.pct}%`;
-    $('#projectDetailCount').textContent = stats.total === 0 ? 'No tasks yet' : `${stats.done} / ${stats.total} tasks completed`;
+    $('#projectDetailCount').textContent = stats.total === 0 ? 'タスクはまだありません' : `${stats.done} / ${stats.total} 件が完了`;
 
     const completeBtn = $('#projectCompleteBtn');
     completeBtn.title = isDone ? '進行中に戻す' : 'プロジェクトを完了';
@@ -1751,6 +1754,7 @@
     });
     $$('#mobileTabbar button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     if (!['today', 'inbox', 'upcoming', 'completed'].includes(view)) activeCategory = null;
+    if (view === 'settings') buildCharacterPicker();
     syncFab();
     $('.main').scrollTo({ top: 0 });
   }
@@ -2231,6 +2235,12 @@
 
   /* ---------- Settings: character ---------- */
 
+  // The picker shows one portrait per character. Building it during start-up meant
+  // every first load fetched all eight — the bulk of the page's weight — for a
+  // screen most people open rarely, if ever. It is built the first time Settings
+  // becomes visible and behaves normally from then on.
+  let characterPickerBuilt = false;
+
   function renderCharacterSettings() {
     const isFixed = settings.characterMode === 'fixed';
     $$('#characterModeSegmented button').forEach(b =>
@@ -2242,13 +2252,15 @@
 
     const picker = $('#characterPicker');
     picker.classList.toggle('is-locked', !isFixed);
+    if (!characterPickerBuilt) return;
+
     const selected = getCharacterKey();
     picker.innerHTML = '';
     CHARACTERS.forEach(c => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'character-option char-' + c.key + (isFixed && c.key === selected ? ' selected' : '');
-      btn.appendChild(buildCharacterVisual(c.key));
+      btn.appendChild(buildCharacterVisual(c.key, { lazy: true }));
       btn.insertAdjacentHTML('beforeend', `<span>${c.label}</span><span class="char-check">${iconCheck}</span>`);
       btn.addEventListener('click', () => {
         settings.characterMode = 'fixed';
@@ -2260,6 +2272,14 @@
       });
       picker.appendChild(btn);
     });
+  }
+
+  /** Runs the first time Settings is shown, which is the point at which the
+   *  portraits are actually about to be looked at. */
+  function buildCharacterPicker() {
+    if (characterPickerBuilt) return;
+    characterPickerBuilt = true;
+    renderCharacterSettings();
   }
 
   $$('#characterModeSegmented button').forEach(b => b.addEventListener('click', () => {

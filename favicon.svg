@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Bienestar Flow のブランド色（クリーム地＋コーラルオレンジ）に合わせたチェックマーク。
+       小さいタブ表示でも形が潰れないよう、線は太く要素はひとつだけにしています。 -->
+  <rect width="64" height="64" rx="15" fill="#ef6c51"/>
+  <path d="M18 33.5 27.5 43 46 22.5" fill="none" stroke="#fff6e9"
+        stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
